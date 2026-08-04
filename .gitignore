@@ -1,2 +1,5 @@
 .agents
+.venv
 skills-lock.json
+.env
+uv.lock
