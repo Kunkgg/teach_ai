@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glossary — AI 工程核心术语表</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <style>
+    .glossary-entry {
+      margin-bottom: var(--s-6);
+      padding-bottom: var(--s-4);
+      border-bottom: 1px solid var(--c-border);
+    }
+    .glossary-term {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--c-text);
+    }
+    .glossary-term-en {
+      font-family: var(--f-mono);
+      font-size: 0.9rem;
+      color: var(--c-accent);
+      margin-left: var(--s-2);
+    }
+    .glossary-term-zh {
+      color: var(--c-text-muted);
+      font-size: 0.9rem;
+      margin-left: var(--s-2);
+    }
+    .glossary-def {
+      margin-top: var(--s-2);
+      padding-left: var(--s-4);
+      border-left: 3px solid var(--c-border);
+    }
+    .glossary-related {
+      font-size: 0.85rem;
+      color: var(--c-text-muted);
+      margin-top: var(--s-2);
+    }
+    body { max-width: var(--max-w-wide); }
+  </style>
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Reference</span>
+  <h1>AI 工程核心术语表</h1>
+  <p class="lesson-subtitle">Quick reference — 技术术语用英文，解释用中文</p>
+</header>
+
+<p>本术语表在学习过程中会持续更新。每个术语标注了它首次出现的课程编号。</p>
+
+<!-- ================================================================== -->
+<h2>基础概念</h2>
+
+<div class="glossary-entry" id="llm">
+  <span class="glossary-term">LLM</span>
+  <span class="glossary-term-en">Large Language Model</span>
+  <span class="glossary-term-zh">大语言模型</span>
+  <div class="glossary-def">
+    <p>在海量文本上训练的深度学习模型，能够理解和生成人类语言。代表：GPT-4、Claude、Gemini、Llama。作为 AI Engineer，你通过 API 使用它，不需要训练它。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#prompt">Prompt</a>, <a href="#completion">Completion</a>, <a href="#token">Token</a></p>
+</div>
+
+<div class="glossary-entry" id="prompt">
+  <span class="glossary-term">Prompt</span>
+  <span class="glossary-term-en">Prompt</span>
+  <span class="glossary-term-zh">提示词</span>
+  <div class="glossary-def">
+    <p>发送给 LLM 的输入文本。包含你的指令、问题、上下文等。Prompt 的质量直接决定 LLM 输出的质量。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#completion">Completion</a>, <a href="#prompt-template">Prompt Template</a></p>
+</div>
+
+<div class="glossary-entry" id="completion">
+  <span class="glossary-term">Completion</span>
+  <span class="glossary-term-en">Completion</span>
+  <span class="glossary-term-zh">补全/生成结果</span>
+  <div class="glossary-def">
+    <p>LLM 根据 Prompt 生成的输出文本。也叫 response 或 generation。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#prompt">Prompt</a>, <a href="#token">Token</a></p>
+</div>
+
+<div class="glossary-entry" id="token">
+  <span class="glossary-term">Token</span>
+  <span class="glossary-term-en">Token</span>
+  <span class="glossary-term-zh">令牌/标记</span>
+  <div class="glossary-def">
+    <p>LLM 处理文本的最小单位。大约 4 个英文字符 = 1 token，1 个中文字 ≈ 1-2 tokens。API 按 token 计费，也有 context window（上下文窗口）的 token 数量限制。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#context-window">Context Window</a></p>
+</div>
+
+<div class="glossary-entry" id="context-window">
+  <span class="glossary-term">Context Window</span>
+  <span class="glossary-term-en">Context Window</span>
+  <span class="glossary-term-zh">上下文窗口</span>
+  <div class="glossary-def">
+    <p>LLM 一次能处理的最大 token 数量。包含输入（prompt）和输出（completion）的总和。GPT-4 通常是 128K tokens，Claude 可达 200K tokens。这是 RAG 存在的原因之一 — 你不能把所有文档都塞进 context window。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#token">Token</a>, <a href="#rag">RAG</a></p>
+</div>
+
+
+<!-- ================================================================== -->
+<h2>API 调用相关</h2>
+
+<div class="glossary-entry" id="chat-completion">
+  <span class="glossary-term">Chat Completion</span>
+  <span class="glossary-term-en">Chat Completion API</span>
+  <span class="glossary-term-zh">聊天补全 API</span>
+  <div class="glossary-def">
+    <p>LLM 的核心 API 接口。接收一个 <a href="#messages-array">messages 数组</a>，返回模型生成的回复。每次调用都是无状态的 — LLM 不记得上一次请求，所以你必须每次都发送完整的对话历史。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0002-llm-api-first-call.html">Lesson 0002</a> · 相关: <a href="#messages-array">Messages 数组</a>, <a href="#temperature">Temperature</a>, <a href="#token">Token</a></p>
+</div>
+
+<div class="glossary-entry" id="messages-array">
+  <span class="glossary-term">Messages 数组</span>
+  <span class="glossary-term-en">Messages Array</span>
+  <span class="glossary-term-zh">消息数组</span>
+  <div class="glossary-def">
+    <p>Chat API 的输入格式。包含多条消息，每条有 <code>role</code>（system / user / assistant）和 <code>content</code>。<code>system</code> 定义行为规则，<code>user</code> 是用户输入，<code>assistant</code> 是模型历史回复。三者组合构成完整的对话上下文。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0002-llm-api-first-call.html">Lesson 0002</a> · 相关: <a href="#chat-completion">Chat Completion</a>, <a href="#prompt">Prompt</a></p>
+</div>
+
+<div class="glossary-entry" id="temperature">
+  <span class="glossary-term">Temperature</span>
+  <span class="glossary-term-en">Temperature</span>
+  <span class="glossary-term-zh">温度</span>
+  <div class="glossary-def">
+    <p>控制 LLM 输出随机性的参数。0 = 最确定性（每次回答几乎相同），2 = 最随机。RAG 场景通常用低温度（0–0.3）以获得准确、一致的回答；创意写作用高温度（0.7–1.0）。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0002-llm-api-first-call.html">Lesson 0002</a> · 相关: <a href="#chat-completion">Chat Completion</a></p>
+</div>
+
+<div class="glossary-entry" id="openai-compatible">
+  <span class="glossary-term">OpenAI Compatible API</span>
+  <span class="glossary-term-en">OpenAI Compatible API</span>
+  <span class="glossary-term-zh">OpenAI 兼容 API</span>
+  <div class="glossary-def">
+    <p>许多 LLM 厂商（DeepSeek、智谱、Moonshot 等）采用与 OpenAI 相同的 API 格式。只需用 <code>openai</code> Python 包，切换 <code>base_url</code> 和 <code>api_key</code> 即可调用不同厂商的模型。这已成为行业事实标准。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0002-llm-api-first-call.html">Lesson 0002</a> · 相关: <a href="#chat-completion">Chat Completion</a>, <a href="#embedding">Embedding</a></p>
+</div>
+
+<!-- ================================================================== -->
+<h2>RAG 相关</h2>
+
+<div class="glossary-entry" id="embedding">
+  <span class="glossary-term">Embedding</span>
+  <span class="glossary-term-en">Embedding / Vector Embedding</span>
+  <span class="glossary-term-zh">嵌入/向量嵌入</span>
+  <div class="glossary-def">
+    <p>把文本（或其他数据）转换成一个高维度的数字向量（如 1536 维）。语义相似的文本，其向量在空间中的距离更近。用于相似度搜索。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#vector-db">Vector Database</a>, <a href="#cosine-similarity">Cosine Similarity</a></p>
+</div>
+
+<div class="glossary-entry" id="vector-db">
+  <span class="glossary-term">Vector Database</span>
+  <span class="glossary-term-en">Vector Database / Vector Store</span>
+  <span class="glossary-term-zh">向量数据库</span>
+  <div class="glossary-def">
+    <p>专门存储和检索向量的数据库。支持高效的相似度搜索（"找到和这个向量最接近的 K 个向量"）。常见：ChromaDB（轻量/入门）、Pinecone（云服务）、FAISS（Facebook 出品，高性能）。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#embedding">Embedding</a>, <a href="#rag">RAG</a></p>
+</div>
+
+<div class="glossary-entry" id="rag">
+  <span class="glossary-term">RAG</span>
+  <span class="glossary-term-en">Retrieval-Augmented Generation</span>
+  <span class="glossary-term-zh">检索增强生成</span>
+  <div class="glossary-def">
+    <p>一种架构模式：先从知识库中<strong>检索（Retrieve）</strong>相关文档，然后用这些文档<strong>增强（Augment）</strong> prompt，最后让 LLM <strong>生成（Generate）</strong>回答。解决 LLM 不了解私有数据/最新信息的问题。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#embedding">Embedding</a>, <a href="#vector-db">Vector Database</a>, <a href="#chunking">Chunking</a></p>
+</div>
+
+<div class="glossary-entry" id="chunking">
+  <span class="glossary-term">Chunking</span>
+  <span class="glossary-term-en">Chunking / Text Splitting</span>
+  <span class="glossary-term-zh">文本切分</span>
+  <div class="glossary-def">
+    <p>把长文档切分成小段（chunks），每段独立向量化并存入向量数据库。切分策略（按段落、按句子、按固定字数、递归切分等）直接影响检索质量。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#rag">RAG</a>, <a href="#embedding">Embedding</a></p>
+</div>
+
+<div class="glossary-entry" id="cosine-similarity">
+  <span class="glossary-term">Cosine Similarity</span>
+  <span class="glossary-term-en">Cosine Similarity</span>
+  <span class="glossary-term-zh">余弦相似度</span>
+  <div class="glossary-def">
+    <p>衡量两个向量方向一致程度的指标，值域 [-1, 1]。1 = 完全相同方向（最相似），0 = 正交（无关），-1 = 完全相反。在 RAG 检索中用于找到与查询最相似的文档。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#embedding">Embedding</a>, <a href="#vector-db">Vector Database</a></p>
+</div>
+
+<!-- ================================================================== -->
+<h2>LangChain / LangGraph 相关</h2>
+
+<div class="glossary-entry" id="langchain">
+  <span class="glossary-term">LangChain</span>
+  <span class="glossary-term-en">LangChain</span>
+  <span class="glossary-term-zh">—</span>
+  <div class="glossary-def">
+    <p>一个用于构建 LLM 应用的 Python 框架。提供 Prompt Templates、Output Parsers、Tool Calling、Document Loaders 等组件。用 LCEL（LangChain Expression Language）组合这些组件。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#lcel">LCEL</a>, <a href="#langgraph">LangGraph</a></p>
+</div>
+
+<div class="glossary-entry" id="lcel">
+  <span class="glossary-term">LCEL</span>
+  <span class="glossary-term-en">LangChain Expression Language</span>
+  <span class="glossary-term-zh">LangChain 表达语言</span>
+  <div class="glossary-def">
+    <p>LangChain 中用 <code>|</code>（pipe 管道符）将组件串联的声明式语法。如 <code>prompt | llm | parser</code> 表示 "先填充 prompt，送给 LLM，再解析输出"。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#langchain">LangChain</a>, <a href="#prompt-template">Prompt Template</a></p>
+</div>
+
+<div class="glossary-entry" id="langgraph">
+  <span class="glossary-term">LangGraph</span>
+  <span class="glossary-term-en">LangGraph</span>
+  <span class="glossary-term-zh">—</span>
+  <div class="glossary-def">
+    <p>基于 LangChain 的框架，用<strong>有状态图（Stateful Graph）</strong>编排复杂的 AI 工作流。每个节点（Node）是一个处理步骤，边（Edge）定义流转。支持条件分支、循环、状态持久化和人工介入。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#langchain">LangChain</a>, <a href="#stategraph">StateGraph</a>, <a href="#agent">Agent</a></p>
+</div>
+
+<div class="glossary-entry" id="stategraph">
+  <span class="glossary-term">StateGraph</span>
+  <span class="glossary-term-en">StateGraph</span>
+  <span class="glossary-term-zh">状态图</span>
+  <div class="glossary-def">
+    <p>LangGraph 的核心数据结构。定义一个图，包含状态（State）、节点（Nodes）和边（Edges）。每次执行时，状态在节点之间传递和更新。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#langgraph">LangGraph</a></p>
+</div>
+
+<div class="glossary-entry" id="prompt-template">
+  <span class="glossary-term">Prompt Template</span>
+  <span class="glossary-term-en">Prompt Template</span>
+  <span class="glossary-term-zh">提示词模板</span>
+  <div class="glossary-def">
+    <p>一个带有占位符的 prompt 格式。运行时用实际数据填充占位符，生成完整的 prompt。类似 Python 的 f-string，但有更多功能（如条件渲染、few-shot examples）。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#prompt">Prompt</a>, <a href="#lcel">LCEL</a></p>
+</div>
+
+<div class="glossary-entry" id="tool-calling">
+  <span class="glossary-term">Tool Calling</span>
+  <span class="glossary-term-en">Tool Calling / Function Calling</span>
+  <span class="glossary-term-zh">工具调用</span>
+  <div class="glossary-def">
+    <p>让 LLM 决定是否需要调用外部工具（函数），并生成调用所需的参数。LLM 不直接执行工具 — 它只生成调用请求，由应用层执行。这是 Agent 的基础能力。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#agent">Agent</a>, <a href="#react">ReAct</a></p>
+</div>
+
+<!-- ================================================================== -->
+<h2>Agent 相关</h2>
+
+<div class="glossary-entry" id="agent">
+  <span class="glossary-term">Agent</span>
+  <span class="glossary-term-en">AI Agent / Autonomous Agent</span>
+  <span class="glossary-term-zh">智能体</span>
+  <div class="glossary-def">
+    <p>一个能自主决定行动步骤的 LLM 应用。Agent 在一个循环中运行：观察 → 思考 → 行动 → 观察 → …直到任务完成。你使用的 Claude Code 就是一个典型的 Agent。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#react">ReAct</a>, <a href="#tool-calling">Tool Calling</a></p>
+</div>
+
+<div class="glossary-entry" id="react">
+  <span class="glossary-term">ReAct</span>
+  <span class="glossary-term-en">ReAct (Reasoning + Acting)</span>
+  <span class="glossary-term-zh">推理-行动模式</span>
+  <div class="glossary-def">
+    <p>一种常见的 Agent 模式：LLM 先<strong>推理（Reasoning）</strong>当前应该做什么，然后<strong>行动（Acting）</strong>执行操作，观察结果后再推理下一步。是最基础也最常用的 Agent 设计模式。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#agent">Agent</a>, <a href="#tool-calling">Tool Calling</a></p>
+</div>
+
+<div class="glossary-entry" id="hitl">
+  <span class="glossary-term">Human-in-the-Loop</span>
+  <span class="glossary-term-en">Human-in-the-Loop (HITL)</span>
+  <span class="glossary-term-zh">人工介入</span>
+  <div class="glossary-def">
+    <p>在 Agent 的工作流中设置检查点，暂停执行，等待人工审核或确认后再继续。用于关键决策步骤，确保 AI 不会自主执行高风险操作。</p>
+  </div>
+  <p class="glossary-related">相关: <a href="#agent">Agent</a>, <a href="#langgraph">LangGraph</a></p>
+</div>
+
+<!-- ================================================================== -->
+
+<footer class="lesson-footer">
+  <p>本术语表随课程持续更新 · AI Engineering 教学工作区 · 2026</p>
+</footer>
+
+</body>
+</html>

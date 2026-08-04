@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0001 — AI 工程全景图：你需要学什么，不需要学什么</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Lesson 0001</span>
+  <h1>AI 工程全景图：你需要学什么，不需要学什么</h1>
+  <p class="lesson-subtitle">从 Python 工程师的视角，理清 AI 工程的知识边界</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 20 分钟</span>
+    <span><span class="tag tag-concept">概念课</span></span>
+    <span>📅 Week 1 · Day 1</span>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<h2>为什么是 AI 工程而不是 AI 研究</h2>
+
+<p>你需要先理解一个关键区分：<strong>AI Researcher</strong>（AI 研究员）和 <strong>AI Engineer</strong>（AI 工程师）是两条完全不同的职业路径。</p>
+
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th>AI Researcher</th>
+      <th>AI Engineer</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>核心工作</strong></td>
+      <td>设计新的模型架构和算法</td>
+      <td>用现有模型构建应用和系统</td>
+    </tr>
+    <tr>
+      <td><strong>数学要求</strong></td>
+      <td>线性代数、概率论、优化理论</td>
+      <td>理解概念即可，不需推导</td>
+    </tr>
+    <tr>
+      <td><strong>编程重点</strong></td>
+      <td>PyTorch、模型训练、GPU 优化</td>
+      <td>API 集成、Pipeline 编排、系统设计</td>
+    </tr>
+    <tr>
+      <td><strong>典型产出</strong></td>
+      <td>论文、新模型、benchmark</td>
+      <td>可运行的 AI 应用、RAG 系统、Agent</td>
+    </tr>
+    <tr>
+      <td><strong>学历要求</strong></td>
+      <td>通常需要硕/博</td>
+      <td>项目经验 &gt; 学历</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-mission">
+  <div class="callout-title">🎯 和你的 Mission 的关系</div>
+  <p>你要走的是 <strong>AI Engineer</strong> 路线。这意味着你那些"感觉太慢"的数学内容 — <em>确实不需要学</em>。rohitg00 的 500+ 课时路线图中，Phase 00-07 的大部分内容你都可以跳过。你需要的是 <strong>Phase 08-16</strong> 的核心内容：LLM Engineering → RAG → Agents。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>AI Engineer 的技术栈地图</h2>
+
+<p>下面这张地图展示了一个 AI Engineer 需要掌握的技术栈。<span style="color: var(--c-accent); font-weight: 600;">橙色标注</span>的是你这个月要重点掌握的，灰色的是你已经具备或暂时不需要的。</p>
+
+<div class="diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────────┐
+│                        AI Engineer 技术栈                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─── 你已有的基础 ──────────────────────────────────────────┐   │
+│  │  ✅ Python (OOP, 装饰器, 生成器)                         │   │
+│  │  ✅ 后端开发 (API 设计, HTTP, JSON)                      │   │
+│  │  ✅ 前端开发 (可视化, 数据展示)                           │   │
+│  │  ✅ AI 编程 Agent 使用经验                               │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌─── Week 1: RAG 基础 ─────────────────────────────────────┐  │
+│  │  🟠 LLM API 调用 (Chat Completions, Embeddings)         │  │
+│  │  🟠 文档加载与切分 (Document Loading, Chunking)          │  │
+│  │  🟠 向量数据库 (Vector DB: ChromaDB)                     │  │
+│  │  🟠 RAG Pipeline 搭建                                   │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌─── Week 2: LangChain ────────────────────────────────────┐  │
+│  │  🟠 LCEL (LangChain Expression Language)                │  │
+│  │  🟠 Prompt Templates & Output Parsers                   │  │
+│  │  🟠 Tool Calling (让 LLM 调用外部工具)                   │  │
+│  │  🟠 Chain Composition (组合多个步骤)                     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌─── Week 3: LangGraph + Agent ────────────────────────────┐  │
+│  │  🟠 StateGraph (有状态的图)                              │  │
+│  │  🟠 Nodes & Edges (节点和边)                             │  │
+│  │  🟠 Conditional Routing (条件路由)                       │  │
+│  │  🟠 Agent 模式: ReAct, Multi-Agent                      │  │
+│  │  🟠 Human-in-the-Loop (人工介入)                        │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌─── Week 4: 生产化 ───────────────────────────────────────┐  │
+│  │  🟠 FastAPI 部署                                        │  │
+│  │  🟠 LangSmith 可观测性                                  │  │
+│  │  🟠 评估 (Evaluation)                                   │  │
+│  │  🟠 项目整合: AI 可信看板 Demo                           │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  ┌─── 暂时不需要 ───────────────────────────────────────────┐   │
+│  │  ⬜ 模型训练 / Fine-tuning（有余力再学）                 │   │
+│  │  ⬜ 深度数学（线代、概率论推导）                          │   │
+│  │  ⬜ MLOps / GPU 集群管理                                 │   │
+│  │  ⬜ 计算机视觉 / 语音处理                                │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</pre>
+<p class="diagram-caption">图 1：AI Engineer 技术栈地图 — 4 周学习路径</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>核心概念速览</h2>
+
+<p>在正式开始之前，你需要理解 5 个核心概念。这些概念会贯穿整个学习过程。</p>
+
+<h3>1. LLM（Large Language Model，大语言模型）</h3>
+<p>你已经在使用 Claude Code — Claude 就是一个 LLM。LLM 的本质是一个<strong>文本补全机器</strong>：给它一段文本（prompt），它生成下一段文本（completion）。作为 AI Engineer，你不需要知道它内部怎么运作，你只需要知道<strong>如何通过 API 高效地使用它</strong>。</p>
+
+<h3>2. Embedding（嵌入/向量化）</h3>
+<p>把文本转换成一组数字（向量），使得<strong>含义相似的文本在数学空间中距离更近</strong>。比如 "Python 编程" 和 "Python 开发" 的向量会很接近，而 "Python 蟒蛇" 的向量会远一些。这是 RAG 的基础。</p>
+
+<h3>3. RAG（Retrieval-Augmented Generation，检索增强生成）</h3>
+<p>LLM 只知道训练时见过的数据。RAG 让你在<strong>调用 LLM 之前先检索相关文档</strong>，把检索到的内容塞到 prompt 里，让 LLM 基于你的私有数据回答问题。</p>
+
+<div class="diagram">
+<pre>
+用户提问: "可信构建的评分标准是什么？"
+            │
+            ▼
+    ┌── Retrieval ──┐
+    │  在向量数据库中  │
+    │  搜索相关文档    │
+    └───────┬────────┘
+            │ 找到 3 个相关段落
+            ▼
+    ┌── Augmentation ─┐
+    │  把问题 + 相关    │
+    │  段落组合成       │
+    │  增强的 prompt    │
+    └───────┬──────────┘
+            │
+            ▼
+    ┌── Generation ──┐
+    │  LLM 基于增强的  │
+    │  prompt 生成      │
+    │  准确的回答       │
+    └────────────────┘
+</pre>
+<p class="diagram-caption">图 2：RAG 的三步流程 — Retrieval → Augmentation → Generation</p>
+</div>
+
+<div class="callout callout-mission">
+  <div class="callout-title">🎯 和可信看板的关系</div>
+  <p>你的可信看板有大量的规范文档和扫描数据。RAG 可以让用户用自然语言查询这些数据："最近一次版本发布中，哪些组件的编码规范检查没通过？" — LLM 会检索相关数据，给出准确回答。</p>
+</div>
+
+<h3>4. Agent（智能体）</h3>
+<p>一个 Agent 是一个<strong>能自主决定下一步做什么的 LLM 应用</strong>。和简单的 "问→答" 不同，Agent 可以：</p>
+<ul>
+  <li>观察环境（读取数据、API 返回值）</li>
+  <li>思考下一步（LLM 推理）</li>
+  <li>执行动作（调用工具、执行代码）</li>
+  <li>循环以上步骤直到任务完成</li>
+</ul>
+<p>你每天用的 Claude Code 就是一个 Agent — 它读代码、分析问题、调用工具、写代码，循环直到完成。</p>
+
+<h3>5. LangGraph</h3>
+<p>LangGraph 是一个框架，用<strong>图（Graph）</strong>来编排复杂的 AI 工作流。每个节点（Node）是一个处理步骤，边（Edge）定义流转逻辑。和简单的线性 Chain 不同，LangGraph 支持：</p>
+<ul>
+  <li>条件分支（Conditional Routing）</li>
+  <li>循环（Loops）</li>
+  <li>状态持久化（State Checkpointing）</li>
+  <li>人工介入（Human-in-the-Loop）</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2>知识检验</h2>
+
+<p>通过几道题确认你理解了关键区分：</p>
+
+<div class="quiz" data-quiz-id="q1">
+  <p class="quiz-question">Q1: 作为 AI Engineer，你的核心工作是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">设计新的 Transformer 架构来提升模型性能</button>
+    <button class="quiz-option" data-correct="true">用现有的 LLM 和工具构建可运行的 AI 应用</button>
+    <button class="quiz-option">训练大规模语言模型并优化 GPU 集群利用率</button>
+    <button class="quiz-option">撰写机器学习论文并在顶会上发表研究成果</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="q2">
+  <p class="quiz-question">Q2: RAG 解决的核心问题是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">让 LLM 的推理速度更快，降低 API 调用成本</button>
+    <button class="quiz-option">让 LLM 能处理图片和音频等多模态输入</button>
+    <button class="quiz-option" data-correct="true">让 LLM 能基于私有/最新数据回答问题</button>
+    <button class="quiz-option">让 LLM 能同时处理多个用户的并发请求</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="q3">
+  <p class="quiz-question">Q3: Agent 和普通的 LLM 对话有什么区别？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">Agent 使用更大的模型，普通对话使用小模型</button>
+    <button class="quiz-option">Agent 只能处理英文，普通对话支持多语言</button>
+    <button class="quiz-option" data-correct="true">Agent 能自主决定调用工具和执行多步操作</button>
+    <button class="quiz-option">Agent 不需要 API key，普通对话需要付费</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="q4">
+  <p class="quiz-question">Q4: 在你的可信看板项目中，哪个场景最适合用 RAG？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">自动修改代码中的编码规范违规问题</button>
+    <button class="quiz-option" data-correct="true">用自然语言查询可信规范文档和扫描数据</button>
+    <button class="quiz-option">生成看板前端界面的 UI 组件和样式</button>
+    <button class="quiz-option">自动部署和回滚软件版本发布流程</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<!-- ================================================================== -->
+<h2>你的第一步</h2>
+
+<p>这节课帮你建立了全景认知。从下一课开始，我们直接进入 <strong>RAG</strong> 的实战。你的第一个动手任务是：</p>
+
+<ol>
+  <li>调用 LLM API（OpenAI 或 Anthropic），完成一次基础的 Chat Completion</li>
+  <li>调用 Embedding API，把一段中文文本转成向量</li>
+  <li>计算两段文本向量之间的余弦相似度</li>
+</ol>
+
+<div class="callout callout-tip">
+  <div class="callout-title">📖 推荐阅读</div>
+  <p>在进入下一课之前，建议快速浏览 <a href="https://roadmap.sh/ai-engineer" target="_blank">roadmap.sh/ai-engineer</a> 的全景图，对照本课的技术栈地图，确认你的学习路径。不需要深读，5 分钟扫一遍即可。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>参考文档</h2>
+
+<ul>
+  <li>📘 <a href="../reference/glossary.html">术语表 (Glossary)</a> — AI 工程核心术语速查</li>
+</ul>
+
+<!-- ================================================================== -->
+
+<div class="callout callout-concept">
+  <div class="callout-title">💬 有疑问？</div>
+  <p>这个教学工作区是交互式的。如果你对任何概念不清楚，或者想深入了解某个点，随时问我。我是你的教练，不是录播课。用 <code>/teach</code> 继续下一课，或者直接提问。</p>
+</div>
+
+<nav class="lesson-nav">
+  <span class="text-muted">← 这是第一课</span>
+  <a href="0002-llm-api-first-call.html">Lesson 0002: 第一次 LLM API 调用 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · Mission: 从 Python 全栈到 AI 工程师 · 2026</p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

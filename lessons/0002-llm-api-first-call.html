@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0002 — 第一次 LLM API 调用：Chat + Embedding</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/quiz.css">
+  <link rel="stylesheet" href="../assets/task.css">
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Lesson 0002</span>
+  <h1>第一次 LLM API 调用：Chat + Embedding</h1>
+  <p class="lesson-subtitle">用 DeepSeek 做对话，用智谱做向量化 — 两个 API，一个 SDK</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 30 分钟</span>
+    <span><span class="tag tag-rag">动手课</span></span>
+    <span>📅 Week 1 · Day 1–2</span>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<h2>为什么从 API 调用开始？</h2>
+
+<p>RAG pipeline 的每一个环节最终都要调用 LLM 的 API。如果你不理解 <strong>Chat Completion</strong> 和 <strong>Embedding</strong> 这两个核心 API 的工作方式，后面学 LangChain、LangGraph 时你会觉得"框架在替我做魔法" — 这是最危险的。</p>
+
+<p>这节课的目标很明确：</p>
+
+<ol>
+  <li><strong>Chat Completion</strong> — 给 LLM 发消息，拿到回复（用 DeepSeek）</li>
+  <li><strong>Embedding</strong> — 把文本变成向量（用智谱）</li>
+  <li><strong>余弦相似度</strong> — 用数学衡量两段文本"有多像"</li>
+</ol>
+
+<div class="callout callout-concept">
+  <div class="callout-title">💡 关键认知</div>
+  <p>DeepSeek 和智谱的 API 都是 <strong>OpenAI 兼容</strong>的。这意味着你只需要安装 <code>openai</code> 这一个 Python 包，通过切换 <code>base_url</code> 和 <code>api_key</code> 就能调用不同厂商的模型。这不是巧合 — OpenAI 的 API 格式已经成为行业事实标准。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>你的 API 配置清单</h2>
+
+<p>在开始写代码之前，确认你有以下信息：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>厂商</th>
+      <th>用途</th>
+      <th>base_url</th>
+      <th>模型名</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>DeepSeek</strong></td>
+      <td>Chat 对话</td>
+      <td><code>https://api.deepseek.com</code></td>
+      <td><code>deepseek-v4-flash</code></td>
+    </tr>
+    <tr>
+      <td><strong>智谱</strong></td>
+      <td>Embedding 向量化</td>
+      <td><code>https://open.bigmodel.cn/api/paas/v4/</code></td>
+      <td><code>embedding-3</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-warning">
+  <div class="callout-title">⚠️ 关于 DeepSeek 模型名</div>
+  <p>旧的 <code>deepseek-chat</code> 和 <code>deepseek-reasoner</code> 已在 2026 年 7 月下线。现在用 <code>deepseek-v4-flash</code>（通用任务）或 <code>deepseek-v4-pro</code>（复杂推理）。如果你不确定，登录 <a href="https://platform.deepseek.com" target="_blank">DeepSeek Platform</a> 查看最新模型列表。</p>
+</div>
+
+<div class="callout callout-tip">
+  <div class="callout-title">💡 为什么 Embedding 用智谱？</div>
+  <p>因为 <strong>DeepSeek 没有 Embedding API</strong> — 它只提供 Chat 类模型。在 RAG 中，Chat 模型和 Embedding 模型来自不同厂商是完全正常的。你甚至可以用智谱的 Embedding + DeepSeek 的 Chat 来搭建你的 RAG pipeline — 下节课我们就会这么做。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ①：Chat Completion API</h2>
+
+<h3>核心概念：Messages 数组</h3>
+
+<p>Chat API 不是"发一句话、回一句话"这么简单。它接收的是一个 <strong>messages 数组</strong>，其中每条消息都有一个 <code>role</code>（角色）：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>role</th>
+      <th>含义</th>
+      <th>用途</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>system</code></td>
+      <td>系统指令</td>
+      <td>设定 LLM 的行为规则和角色定义</td>
+    </tr>
+    <tr>
+      <td><code>user</code></td>
+      <td>用户输入</td>
+      <td>你（或你的应用用户）发送的消息</td>
+    </tr>
+    <tr>
+      <td><code>assistant</code></td>
+      <td>模型回复</td>
+      <td>LLM 之前的回复，用于多轮对话</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>这三个 role 的组合就是 LLM 对话的全部。你每次都要发送 <em>完整的对话历史</em>，因为 LLM 本身是 <strong>无状态的</strong> — 它不记得上一次请求。</p>
+
+<div class="callout callout-mission">
+  <div class="callout-title">🎯 和可信看板的关系</div>
+  <p>以后你的可信看板 RAG 系统会这样工作：<code>system</code> message 设定"你是一个可信工程助手"，<code>user</code> 发送用户的查询 + 检索到的文档，<code>assistant</code> 返回基于文档的回答。理解 messages 数组是一切的起点。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>Task ①：调用 DeepSeek Chat API</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">1</span>
+    动手：第一次 Chat Completion 调用
+  </div>
+  <p class="task-goal">目标：用 Python 调用 DeepSeek API，完成一次对话。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>安装依赖（如果还没装过）：</p>
+      <pre><code>pip install openai</code></pre>
+    </li>
+    <li>
+      <p>创建文件 <code>01_chat.py</code>，写入以下代码：</p>
+<pre><code>from openai import OpenAI
+
+# 创建 DeepSeek 客户端 — 只需改 base_url 和 api_key
+client = OpenAI(
+    api_key="你的-DeepSeek-API-Key",     # ← 替换成你的 key
+    base_url="https://api.deepseek.com",
+)
+
+# 发送 Chat Completion 请求
+response = client.chat.completions.create(
+    model="deepseek-v4-flash",
+    messages=[
+        {
+            "role": "system",
+            "content": "你是一个可信工程助手，帮助开发者理解编码规范和可信构建流程。"
+        },
+        {
+            "role": "user",
+            "content": "什么是编码规范检查？用一句话解释。"
+        },
+    ],
+    temperature=0.3,    # 低温度 = 更确定性的回答
+    max_tokens=200,     # 限制回复长度
+)
+
+# 提取回复内容
+answer = response.choices[0].message.content
+print(f"模型回复: {answer}")
+print(f"消耗 tokens: {response.usage.total_tokens}")</code></pre>
+    </li>
+    <li>
+      <p>运行它：</p>
+      <pre><code>python 01_chat.py</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 检查点：你应该看到</div>
+    <p>模型用一句话解释了"编码规范检查"，并打印出 token 消耗量（通常 100–300 tokens）。如果报错 <code>AuthenticationError</code>，检查你的 API key 是否正确。</p>
+  </div>
+</div>
+
+<h3>代码解析：三个你必须理解的参数</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>参数</th>
+      <th>含义</th>
+      <th>常用值</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>temperature</code></td>
+      <td>控制输出的随机性。0 = 最确定，2 = 最随机</td>
+      <td>RAG 用 0–0.3，创意写作用 0.7–1.0</td>
+    </tr>
+    <tr>
+      <td><code>max_tokens</code></td>
+      <td>回复的最大 token 数。注意是 <em>回复</em>，不是总量</td>
+      <td>一般 200–2000，看场景</td>
+    </tr>
+    <tr>
+      <td><code>messages</code></td>
+      <td>完整的对话上下文，必须包含 role 和 content</td>
+      <td>至少一条 user message</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-concept">
+  <div class="callout-title">💡 Token 是什么？</div>
+  <p>Token ≈ 词的碎片。英文中 1 token ≈ 4 个字符，中文中 1 个汉字通常 = 1–2 个 token。API 按 token 计费。你在 <code>response.usage</code> 里能看到精确的 token 数：<code>prompt_tokens</code>（输入）+ <code>completion_tokens</code>（输出）= <code>total_tokens</code>。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ②：Embedding API</h2>
+
+<h3>从直觉到数学</h3>
+
+<p>Embedding 是 RAG 的核心技术。它做一件事：<strong>把文本变成一组数字（向量）</strong>，使得含义相近的文本在数学空间中距离更近。</p>
+
+<div class="diagram">
+<pre>
+文本                          向量 (简化为 3 维)
+──────────────────            ─────────────────────
+"Python 编程教程"      →      [0.82, 0.15, 0.71]
+"Python 开发入门"      →      [0.80, 0.17, 0.69]  ← 和上面很接近！
+"今天天气不错"         →      [0.12, 0.93, 0.08]  ← 完全不同
+</pre>
+<p class="diagram-caption">图 1：语义相似的文本 → 距离相近的向量</p>
+</div>
+
+<p>实际的 Embedding 模型输出的向量维度远不止 3 维。智谱的 <code>embedding-3</code> 默认输出 <strong>2048 维</strong>。维度越高，区分能力越强，但也更占空间。</p>
+
+<!-- ================================================================== -->
+<h2>Task ②：调用智谱 Embedding API</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">2</span>
+    动手：把文本变成向量
+  </div>
+  <p class="task-goal">目标：用智谱的 Embedding API 把文本转成向量，观察输出结构。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>创建文件 <code>02_embedding.py</code>，写入以下代码：</p>
+<pre><code>from openai import OpenAI
+
+# 创建智谱客户端 — 同样的 openai 包，不同的 base_url
+client = OpenAI(
+    api_key="你的-智谱-API-Key",                          # ← 替换
+    base_url="https://open.bigmodel.cn/api/paas/v4/",
+)
+
+# 调用 Embedding API
+response = client.embeddings.create(
+    model="embedding-3",
+    input="什么是编码规范检查？",
+)
+
+# 提取向量
+vector = response.data[0].embedding
+
+print(f"向量维度: {len(vector)}")
+print(f"前 10 个数值: {vector[:10]}")
+print(f"消耗 tokens: {response.usage.total_tokens}")</code></pre>
+    </li>
+    <li>
+      <p>运行它：</p>
+      <pre><code>python 02_embedding.py</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 检查点：你应该看到</div>
+    <p>向量维度 = 2048，前 10 个数值是类似 <code>[0.0123, -0.0456, ...]</code> 的浮点数。每个数值都在 -1 到 1 之间。</p>
+  </div>
+</div>
+
+<h3>Embedding API 与 Chat API 的关键区别</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th>Chat Completion API</th>
+      <th>Embedding API</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>输入</strong></td>
+      <td>messages 数组（多轮对话）</td>
+      <td>单个字符串或字符串数组</td>
+    </tr>
+    <tr>
+      <td><strong>输出</strong></td>
+      <td>生成的文本（自然语言回复）</td>
+      <td>浮点数数组（向量）</td>
+    </tr>
+    <tr>
+      <td><strong>用途</strong></td>
+      <td>对话、推理、生成、总结</td>
+      <td>语义搜索、相似度计算、聚类</td>
+    </tr>
+    <tr>
+      <td><strong>成本</strong></td>
+      <td>较高（按输入+输出 token）</td>
+      <td>很低（智谱约 0.5元/百万 token）</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ================================================================== -->
+<h2>知识 ③：余弦相似度</h2>
+
+<p>有了向量，怎么衡量两段文本"有多像"？用<strong>余弦相似度（Cosine Similarity）</strong>。</p>
+
+<p>你不需要理解推导。只需要记住：</p>
+
+<ul>
+  <li><strong>= 1</strong>：完全相同的含义</li>
+  <li><strong>≈ 0.8–0.9</strong>：含义高度相关</li>
+  <li><strong>≈ 0.5–0.7</strong>：有一些关联</li>
+  <li><strong>≈ 0–0.3</strong>：基本无关</li>
+</ul>
+
+<div class="callout callout-mission">
+  <div class="callout-title">🎯 为什么这很重要？</div>
+  <p>RAG 的核心就是：用户提问 → 把问题转成向量 → 在向量数据库中找到余弦相似度最高的文档片段 → 把这些片段塞到 prompt 里 → 让 LLM 回答。余弦相似度就是"搜索"的数学基础。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>Task ③：计算余弦相似度</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">3</span>
+    动手：衡量文本相似度
+  </div>
+  <p class="task-goal">目标：对 4 段文本做 Embedding，计算两两之间的余弦相似度，验证"语义相近 → 相似度高"。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>创建文件 <code>03_similarity.py</code>，写入以下代码：</p>
+<pre><code>from openai import OpenAI
+
+client = OpenAI(
+    api_key="你的-智谱-API-Key",
+    base_url="https://open.bigmodel.cn/api/paas/v4/",
+)
+
+# 四段测试文本 — 故意设计了两对"含义相近"的
+texts = [
+    "编码规范检查是对源代码进行静态分析的过程",       # A: 编码规范
+    "代码审查用于发现代码中的质量问题和规范违规",       # B: 代码审查（和 A 相关）
+    "可信构建确保软件构建过程的完整性和可追溯性",       # C: 可信构建
+    "今天的天气真好，适合出去散步",                   # D: 无关内容
+]
+
+# 批量获取 Embedding（一次 API 调用搞定）
+response = client.embeddings.create(
+    model="embedding-3",
+    input=texts,
+)
+
+# 提取向量列表
+vectors = [item.embedding for item in response.data]
+
+
+# 计算余弦相似度（不依赖外部库）
+def cosine_similarity(vec_a, vec_b):
+    dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = sum(a * a for a in vec_a) ** 0.5
+    norm_b = sum(b * b for b in vec_b) ** 0.5
+    return dot_product / (norm_a * norm_b)
+
+
+# 打印相似度矩阵
+labels = ["A:编码规范", "B:代码审查", "C:可信构建", "D:天气"]
+print(f"{'':>12}", end="")
+for label in labels:
+    print(f"{label:>12}", end="")
+print()
+
+for i, row_label in enumerate(labels):
+    print(f"{row_label:>12}", end="")
+    for j in range(len(labels)):
+        sim = cosine_similarity(vectors[i], vectors[j])
+        print(f"{sim:>12.4f}", end="")
+    print()</code></pre>
+    </li>
+    <li>
+      <p>运行它：</p>
+      <pre><code>python 03_similarity.py</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 检查点：你应该看到的模式</div>
+    <p>A（编码规范）和 B（代码审查）的相似度应该 <strong>明显高于</strong> 它们和 D（天气）的相似度。这验证了 Embedding 确实在捕捉语义。典型结果：A↔B ≈ 0.75–0.85，A↔D ≈ 0.15–0.35。</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<h2>Task ④：用不同厂商组合完成端到端流程</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">4</span>
+    动手：智谱 Embedding + DeepSeek Chat = Mini RAG
+  </div>
+  <p class="task-goal">目标：模拟 RAG 的核心流程 — 用 Embedding 找到最相关的文档，然后让 Chat 模型基于文档回答。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>创建文件 <code>04_mini_rag.py</code>，写入以下代码：</p>
+<pre><code>from openai import OpenAI
+
+# 两个客户端 — 不同厂商，同一个 SDK
+zhipu = OpenAI(
+    api_key="你的-智谱-API-Key",
+    base_url="https://open.bigmodel.cn/api/paas/v4/",
+)
+deepseek = OpenAI(
+    api_key="你的-DeepSeek-API-Key",
+    base_url="https://api.deepseek.com",
+)
+
+# ── Step 1: 准备"知识库"（3 段文档） ──
+documents = [
+    "编码规范检查通过静态分析工具（如 ESLint、Pylint）自动扫描源代码，"
+    "识别不符合团队编码规范的代码模式，包括命名规范、代码格式、复杂度等。",
+
+    "可信构建是指在可控、可追溯的环境中执行软件构建，"
+    "确保构建产物与源代码的对应关系可验证，防止供应链攻击。",
+
+    "代码度量通过量化指标（如圈复杂度、代码行数、重复率）"
+    "评估代码质量，帮助团队识别需要重构的高风险模块。",
+]
+
+# ── Step 2: 用智谱把文档 + 查询都变成向量 ──
+query = "我们的代码规范检查具体检查哪些方面？"
+
+# 批量 embedding：文档 + 查询一起发
+all_texts = documents + [query]
+emb_response = zhipu.embeddings.create(
+    model="embedding-3",
+    input=all_texts,
+)
+all_vectors = [item.embedding for item in emb_response.data]
+
+doc_vectors = all_vectors[:3]      # 前 3 个是文档向量
+query_vector = all_vectors[3]      # 最后一个是查询向量
+
+# ── Step 3: 找到最相关的文档（余弦相似度） ──
+def cosine_similarity(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    return dot / (norm_a * norm_b)
+
+scores = []
+for i, doc_vec in enumerate(doc_vectors):
+    sim = cosine_similarity(query_vector, doc_vec)
+    scores.append((sim, i))
+    print(f"文档 {i+1} 相似度: {sim:.4f}")
+
+# 取相似度最高的文档
+scores.sort(reverse=True)
+best_idx = scores[0][1]
+best_doc = documents[best_idx]
+print(f"\n最相关文档: 文档 {best_idx + 1}")
+print(f"内容: {best_doc}\n")
+
+# ── Step 4: 用 DeepSeek 基于文档回答问题 ──
+chat_response = deepseek.chat.completions.create(
+    model="deepseek-v4-flash",
+    messages=[
+        {
+            "role": "system",
+            "content": "你是一个可信工程助手。请仅基于提供的参考文档回答问题，"
+                       "不要编造信息。如果文档中没有相关信息，请明确说明。"
+        },
+        {
+            "role": "user",
+            "content": f"参考文档:\n{best_doc}\n\n问题: {query}"
+        },
+    ],
+    temperature=0.2,
+    max_tokens=300,
+)
+
+print("─" * 50)
+print(f"问题: {query}")
+print(f"回答: {chat_response.choices[0].message.content}")</code></pre>
+    </li>
+    <li>
+      <p>运行它：</p>
+      <pre><code>python 04_mini_rag.py</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 检查点</div>
+    <p>程序应该自动选中"文档 1"（编码规范相关），然后 DeepSeek 基于这段文档给出回答。<strong>这就是 RAG 的完整流程</strong> — 只不过我们目前的"向量数据库"是一个 Python list，下一课我们会换成真正的向量数据库。</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识检验</h2>
+
+<p>确认你理解了核心概念：</p>
+
+<div class="quiz" data-quiz-id="q1">
+  <p class="quiz-question">Q1: 为什么 DeepSeek 和智谱的 API 可以用同一个 openai Python 包调用？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">因为 DeepSeek 和智谱是 OpenAI 的子公司</button>
+    <button class="quiz-option" data-correct="true">因为它们的 API 遵循 OpenAI 兼容的协议格式</button>
+    <button class="quiz-option">因为 openai 包内置了所有厂商的适配代码</button>
+    <button class="quiz-option">因为它们使用的底层模型和 GPT 完全相同</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="q2">
+  <p class="quiz-question">Q2: LLM 的 Chat API 为什么每次都要发送完整的 messages 数组？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">为了方便 API 服务器做日志审计和合规检查</button>
+    <button class="quiz-option">为了让服务器在多个 GPU 之间做负载均衡</button>
+    <button class="quiz-option" data-correct="true">因为 LLM 是无状态的，不会记住上一次请求</button>
+    <button class="quiz-option">为了让客户端能离线缓存和回放对话历史</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="q3">
+  <p class="quiz-question">Q3: 在 Task ④ 的 Mini RAG 中，哪一步最接近 RAG 中的"Retrieval"？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">用智谱 API 把文本转成向量（Step 2 的 embedding）</button>
+    <button class="quiz-option" data-correct="true">计算余弦相似度并找到最相关的文档（Step 3）</button>
+    <button class="quiz-option">把文档内容拼接到 prompt 里发给 DeepSeek（Step 4）</button>
+    <button class="quiz-option">DeepSeek 生成基于文档的最终回答（Step 4 的返回）</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="q4">
+  <p class="quiz-question">Q4: temperature=0.2 和 temperature=0.9 哪个更适合 RAG 中的回答生成？</p>
+  <div class="quiz-options">
+    <button class="quiz-option" data-correct="true">temperature=0.2，因为 RAG 需要基于文档给出确定的答案</button>
+    <button class="quiz-option">temperature=0.9，因为更高的随机性能覆盖更多文档内容</button>
+    <button class="quiz-option">两者没有区别，temperature 只影响生成速度不影响质量</button>
+    <button class="quiz-option">temperature=0.9，因为低温度会导致模型忽略检索到的文档</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<!-- ================================================================== -->
+<h2>今天学到了什么</h2>
+
+<ol>
+  <li><strong>Chat Completion API</strong> 接收一个 messages 数组（system/user/assistant），LLM 是无状态的</li>
+  <li><strong>Embedding API</strong> 把文本转成高维向量，语义相近 → 向量距离近</li>
+  <li><strong>余弦相似度</strong>可以衡量两段文本的语义相关性（1 = 完全相同，0 = 无关）</li>
+  <li>DeepSeek 和智谱都是 <strong>OpenAI 兼容</strong>的，用同一个 <code>openai</code> 包即可</li>
+  <li>不同厂商的模型可以<strong>混用</strong> — 智谱做 Embedding，DeepSeek 做 Chat，这在 RAG 中很常见</li>
+</ol>
+
+<!-- ================================================================== -->
+<h2>下一课预告</h2>
+
+<p>这节课的 Mini RAG 用的是 Python list 作为"知识库"。但如果你有 1000 篇文档、每篇切成 20 个片段，就是 20000 个向量 — 用 list 遍历计算相似度太慢了。</p>
+
+<p>下一课我们引入 <strong>向量数据库（ChromaDB）</strong>，学会：</p>
+<ul>
+  <li>把文档加载、切分成小块（Chunking）</li>
+  <li>用 ChromaDB 存储和高效检索向量</li>
+  <li>搭建一个能查询真实文档的 RAG pipeline</li>
+</ul>
+
+<div class="callout callout-tip">
+  <div class="callout-title">📖 推荐阅读</div>
+  <p>在进入下一课之前，建议阅读 <a href="https://platform.openai.com/docs/guides/embeddings" target="_blank">OpenAI Embeddings Guide</a>（虽然我们用的是智谱，但概念完全相同）。重点看 "Use cases" 部分，理解 Embedding 除了 RAG 还能做什么。5–10 分钟即可。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>参考文档</h2>
+
+<ul>
+  <li>📘 <a href="../reference/glossary.html">术语表 (Glossary)</a> — AI 工程核心术语速查</li>
+  <li>📘 <a href="https://open.bigmodel.cn/dev/howuse/embedding" target="_blank">智谱 Embedding API 文档</a></li>
+  <li>📘 <a href="https://api-docs.deepseek.com/" target="_blank">DeepSeek API 文档</a></li>
+</ul>
+
+<!-- ================================================================== -->
+
+<div class="callout callout-concept">
+  <div class="callout-title">💬 有疑问？</div>
+  <p>如果运行代码时遇到问题（API key 报错、网络问题、输出不符合预期），随时问我。把错误信息贴过来，我帮你排查。用 <code>/teach</code> 继续下一课，或者直接提问。</p>
+</div>
+
+<nav class="lesson-nav">
+  <a href="0001-ai-engineering-landscape.html">← Lesson 0001: AI 工程全景图</a>
+  <a href="0003-vector-db-chunking.html">Lesson 0003: 向量数据库与文档切分 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · Mission: 从 Python 全栈到 AI 工程师 · 2026</p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

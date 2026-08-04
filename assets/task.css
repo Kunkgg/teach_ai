@@ -1,0 +1,105 @@
+/* task.css — Styles for hands-on coding task sections */
+
+.task {
+  background: var(--c-bg-alt);
+  border: 2px solid var(--c-accent);
+  border-radius: 8px;
+  padding: var(--s-6);
+  margin: var(--s-6) 0;
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--c-accent);
+  margin-bottom: var(--s-4);
+}
+
+.task-header .task-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: var(--c-accent);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.task p, .task ul, .task ol {
+  font-size: 0.95rem;
+}
+
+.task .task-goal {
+  font-weight: 500;
+  margin-bottom: var(--s-3);
+}
+
+/* Checkpoint / expected output */
+.task-checkpoint {
+  background: var(--c-bg);
+  border: 1px dashed var(--c-border);
+  border-radius: 6px;
+  padding: var(--s-3) var(--s-4);
+  margin-top: var(--s-4);
+  font-size: 0.88rem;
+}
+
+.task-checkpoint-title {
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-text-muted);
+  margin-bottom: var(--s-2);
+}
+
+/* Step list inside a task */
+.task-steps {
+  list-style: none;
+  padding-left: 0;
+  counter-reset: step;
+}
+
+.task-steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 2rem;
+  margin-bottom: var(--s-3);
+}
+
+.task-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0.15em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 50%;
+  background: var(--c-accent-light);
+  color: var(--c-accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* Code blocks inside tasks — slightly different styling */
+.task pre {
+  background: var(--c-bg);
+  border-color: var(--c-accent);
+  border-width: 1px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .task {
+    border-color: var(--c-accent);
+  }
+}

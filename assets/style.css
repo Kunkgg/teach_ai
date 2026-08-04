@@ -1,0 +1,414 @@
+/* ==========================================================================
+   AI Engineering Teaching Workspace — Shared Stylesheet
+   Inspired by Edward Tufte's principles: clarity, precision, no chartjunk.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+/* ---------- CSS Custom Properties ---------- */
+:root {
+  /* Colors — warm, scholarly palette */
+  --c-bg:          #faf8f5;
+  --c-bg-alt:      #f0ede8;
+  --c-bg-code:     #f5f2ee;
+  --c-text:        #2c2c2c;
+  --c-text-muted:  #6b6b6b;
+  --c-accent:      #c05621;    /* warm orange for emphasis */
+  --c-accent-light:#fef3e7;
+  --c-link:        #2563eb;
+  --c-link-hover:  #1d4ed8;
+  --c-border:      #ddd8d0;
+  --c-success:     #16a34a;
+  --c-error:       #dc2626;
+  --c-warning:     #d97706;
+  --c-info:        #2563eb;
+
+  /* Semantic colors for AI topics */
+  --c-rag:         #7c3aed;    /* purple for RAG */
+  --c-agent:       #059669;    /* green for Agent */
+  --c-langgraph:   #2563eb;    /* blue for LangGraph */
+  --c-langchain:   #0ea5e9;    /* sky for LangChain */
+
+  /* Typography */
+  --f-body:   'Inter', 'Noto Sans SC', -apple-system, sans-serif;
+  --f-mono:   'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --f-size:   17px;
+  --f-lh:     1.7;
+
+  /* Spacing */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-6: 1.5rem;
+  --s-8: 2rem;
+  --s-12: 3rem;
+  --s-16: 4rem;
+
+  /* Layout */
+  --max-w: 720px;
+  --max-w-wide: 900px;
+}
+
+/* ---------- Dark Mode ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg:          #1a1a1a;
+    --c-bg-alt:      #242424;
+    --c-bg-code:     #1e1e1e;
+    --c-text:        #e0e0e0;
+    --c-text-muted:  #999;
+    --c-accent:      #f59e0b;
+    --c-accent-light:#3d2800;
+    --c-link:        #60a5fa;
+    --c-link-hover:  #93bbfd;
+    --c-border:      #333;
+  }
+}
+
+/* ---------- Reset & Base ---------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: var(--f-size);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--f-body);
+  line-height: var(--f-lh);
+  color: var(--c-text);
+  background-color: var(--c-bg);
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: var(--s-8) var(--s-6);
+}
+
+/* ---------- Typography ---------- */
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--c-text);
+}
+
+h1 {
+  font-size: 1.8rem;
+  margin-bottom: var(--s-2);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.35rem;
+  margin-top: var(--s-12);
+  margin-bottom: var(--s-4);
+  padding-bottom: var(--s-2);
+  border-bottom: 2px solid var(--c-border);
+}
+
+h3 {
+  font-size: 1.1rem;
+  margin-top: var(--s-8);
+  margin-bottom: var(--s-3);
+}
+
+p {
+  margin-bottom: var(--s-4);
+}
+
+a {
+  color: var(--c-link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+a:hover {
+  color: var(--c-link-hover);
+  border-bottom-color: var(--c-link-hover);
+}
+
+strong {
+  font-weight: 600;
+}
+
+/* ---------- Lesson Header ---------- */
+.lesson-header {
+  margin-bottom: var(--s-8);
+}
+
+.lesson-number {
+  font-family: var(--f-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: block;
+  margin-bottom: var(--s-1);
+}
+
+.lesson-subtitle {
+  font-size: 1.05rem;
+  color: var(--c-text-muted);
+  font-weight: 400;
+  margin-top: var(--s-2);
+}
+
+.lesson-meta {
+  display: flex;
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+  font-size: 0.85rem;
+  color: var(--c-text-muted);
+}
+
+.lesson-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+/* ---------- Topic Tags ---------- */
+.tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.15em 0.6em;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tag-rag       { background: #ede9fe; color: var(--c-rag); }
+.tag-agent     { background: #ecfdf5; color: var(--c-agent); }
+.tag-langgraph { background: #eff6ff; color: var(--c-langgraph); }
+.tag-langchain { background: #f0f9ff; color: var(--c-langchain); }
+.tag-concept   { background: var(--c-accent-light); color: var(--c-accent); }
+
+@media (prefers-color-scheme: dark) {
+  .tag-rag       { background: #2d1b69; }
+  .tag-agent     { background: #064e3b; }
+  .tag-langgraph { background: #1e3a5f; }
+  .tag-langchain { background: #0c2d48; }
+}
+
+/* ---------- Code ---------- */
+code {
+  font-family: var(--f-mono);
+  font-size: 0.88em;
+  background: var(--c-bg-code);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+  color: var(--c-accent);
+}
+
+pre {
+  background: var(--c-bg-code);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: var(--s-4);
+  overflow-x: auto;
+  margin: var(--s-4) 0;
+  line-height: 1.5;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  color: var(--c-text);
+}
+
+/* Line numbers in code */
+.line-numbers {
+  counter-reset: line;
+}
+.line-numbers .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 2em;
+  margin-right: 1em;
+  text-align: right;
+  color: var(--c-text-muted);
+  font-size: 0.8em;
+  opacity: 0.5;
+}
+
+/* ---------- Callout Boxes ---------- */
+.callout {
+  padding: var(--s-4) var(--s-6);
+  margin: var(--s-6) 0;
+  border-radius: 6px;
+  border-left: 4px solid;
+  font-size: 0.95rem;
+}
+
+.callout-title {
+  font-weight: 600;
+  margin-bottom: var(--s-2);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.callout-concept {
+  background: var(--c-accent-light);
+  border-color: var(--c-accent);
+}
+
+.callout-tip {
+  background: #ecfdf5;
+  border-color: var(--c-success);
+}
+
+.callout-warning {
+  background: #fffbeb;
+  border-color: var(--c-warning);
+}
+
+.callout-mission {
+  background: #eff6ff;
+  border-color: var(--c-langgraph);
+}
+
+@media (prefers-color-scheme: dark) {
+  .callout-concept { background: #3d2800; }
+  .callout-tip     { background: #064e3b; }
+  .callout-warning { background: #451a03; }
+  .callout-mission { background: #1e3a5f; }
+}
+
+/* ---------- Lists ---------- */
+ul, ol {
+  padding-left: var(--s-6);
+  margin-bottom: var(--s-4);
+}
+
+li {
+  margin-bottom: var(--s-2);
+}
+
+li > ul, li > ol {
+  margin-top: var(--s-2);
+  margin-bottom: var(--s-2);
+}
+
+/* ---------- Tables ---------- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--s-4) 0;
+  font-size: 0.9rem;
+}
+
+th, td {
+  padding: var(--s-3) var(--s-4);
+  text-align: left;
+  border-bottom: 1px solid var(--c-border);
+}
+
+th {
+  font-weight: 600;
+  background: var(--c-bg-alt);
+}
+
+/* ---------- Diagrams (ASCII/SVG containers) ---------- */
+.diagram {
+  background: var(--c-bg-alt);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: var(--s-6);
+  margin: var(--s-6) 0;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.diagram pre {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  display: inline-block;
+}
+
+.diagram-caption {
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+  margin-top: var(--s-2);
+  font-style: italic;
+}
+
+/* ---------- Navigation / Cross-references ---------- */
+.lesson-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--s-12);
+  padding-top: var(--s-6);
+  border-top: 2px solid var(--c-border);
+  font-size: 0.9rem;
+}
+
+.lesson-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+/* ---------- Footer ---------- */
+.lesson-footer {
+  margin-top: var(--s-16);
+  padding-top: var(--s-6);
+  border-top: 1px solid var(--c-border);
+  font-size: 0.85rem;
+  color: var(--c-text-muted);
+  text-align: center;
+}
+
+/* ---------- Print ---------- */
+@media print {
+  body {
+    max-width: 100%;
+    padding: 0;
+    font-size: 11pt;
+  }
+  
+  .lesson-nav,
+  .quiz-container button {
+    display: none;
+  }
+  
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: var(--c-text-muted);
+  }
+}
+
+/* ---------- Utility ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.text-center { text-align: center; }
+.text-muted  { color: var(--c-text-muted); }
+.mt-4        { margin-top: var(--s-4); }
+.mt-8        { margin-top: var(--s-8); }
+.mb-4        { margin-bottom: var(--s-4); }
