@@ -27,3 +27,11 @@
 
 - **2026-08-03**: 初始化教学工作区。完成 Mission 定义、Resources 收集。
 - **2026-08-04**: 用户完成 Lesson 1 四道题，浏览了 roadmap.sh。创建 Lesson 2（LLM API 调用：DeepSeek Chat + 智谱 Embedding + 余弦相似度 + Mini RAG）。
+- **2026-08-05**: 用户完成 Lesson 2，理解了 Mini RAG 流程。新增 `assets/copy-code.js` 组件（所有 `<pre><code>` 代码块一键"复制"按钮，自包含、支持 file://，已应用到 Lesson 1/2/3）。创建 Lesson 3（向量数据库 ChromaDB + 文档切分 Chunking + 端到端 RAG）。API key 从硬编码升级为 `.env` 环境变量（`GLM_KEY` / `DS_KEY`，用户已有 `envs.py`）。Glossary 新增 ANN 词条、丰富 Chunking 词条。
+
+## Components (assets/)
+
+- **style.css** — 共享样式（Tufte 风格、暗色模式、打印优化）
+- **quiz.js / quiz.css** — 选择题组件
+- **task.css** — 动手任务区块样式
+- **copy-code.js** — 代码块一键复制（2026-08-05 新增）。新课程只需在 `</body>` 前加 `<script src="../assets/copy-code.js" defer></script>`。用户反馈：长代码手动拖拽复制浪费时间、打断节奏 —— 此组件解决该问题。

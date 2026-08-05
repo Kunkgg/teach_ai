@@ -167,7 +167,17 @@
   <div class="glossary-def">
     <p>专门存储和检索向量的数据库。支持高效的相似度搜索（"找到和这个向量最接近的 K 个向量"）。常见：ChromaDB（轻量/入门）、Pinecone（云服务）、FAISS（Facebook 出品，高性能）。</p>
   </div>
-  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#embedding">Embedding</a>, <a href="#rag">RAG</a></p>
+  <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#embedding">Embedding</a>, <a href="#rag">RAG</a>, <a href="#ann">ANN</a></p>
+</div>
+
+<div class="glossary-entry" id="ann">
+  <span class="glossary-term">ANN</span>
+  <span class="glossary-term-en">Approximate Nearest Neighbor</span>
+  <span class="glossary-term-zh">近似最近邻</span>
+  <div class="glossary-def">
+    <p>向量数据库用来加速检索的索引算法（ChromaDB 用 HNSW）。不保证找到全局最优解，但用极小的精度损失换取近似 O(log n) 的检索速度（对比暴力搜索的 O(n)）。在 RAG 场景里这点近似完全可以接受。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0003-vector-db-chunking.html">Lesson 0003</a> · 相关: <a href="#vector-db">Vector Database</a>, <a href="#cosine-similarity">Cosine Similarity</a></p>
 </div>
 
 <div class="glossary-entry" id="rag">
@@ -185,9 +195,9 @@
   <span class="glossary-term-en">Chunking / Text Splitting</span>
   <span class="glossary-term-zh">文本切分</span>
   <div class="glossary-def">
-    <p>把长文档切分成小段（chunks），每段独立向量化并存入向量数据库。切分策略（按段落、按句子、按固定字数、递归切分等）直接影响检索质量。</p>
+    <p>把长文档切分成小段（chunks），每段独立向量化并存入向量数据库。切分策略（按段落、按句子、按固定字数、递归切分等）直接影响检索质量。理想 chunk <strong>主题单一且语义完整</strong> —— 太大则一个 chunk 混杂多主题、检索不精准；太小则上下文碎片化。相邻 chunk 可保留 <strong>overlap（重叠）</strong>以避免在边界切断关键信息。</p>
   </div>
-  <p class="glossary-related">相关: <a href="#rag">RAG</a>, <a href="#embedding">Embedding</a></p>
+  <p class="glossary-related">首见: <a href="../lessons/0003-vector-db-chunking.html">Lesson 0003</a> · 相关: <a href="#rag">RAG</a>, <a href="#embedding">Embedding</a></p>
 </div>
 
 <div class="glossary-entry" id="cosine-similarity">
