@@ -247,7 +247,7 @@ zhipu = OpenAI(api_key=GLM_KEY, base_url="https://open.bigmodel.cn/api/paas/v4/"
 client = chromadb.PersistentClient(path="./chroma_db")
 collection = client.get_or_create_collection(
     name="trust_basics",
-    metadata={"hnsw:space": "cosine"},   # 用 cosine 距离，和 Lesson 2 一致
+    configuration={"hnsw": {"space": "cosine"}},   # 用 cosine 距离，和 Lesson 2 一致
 )
 
 # ── Step 2: 准备 3 段文本，用智谱转成向量 ──
@@ -398,7 +398,7 @@ chunk_vectors = [item.embedding for item in emb_resp.data]
 client = chromadb.PersistentClient(path="./chroma_db")
 collection = client.get_or_create_collection(
     name="trust_docs",
-    metadata={"hnsw:space": "cosine"},
+    configuration={"hnsw": {"space": "cosine"}},
 )
 collection.upsert(
     ids=[f"chunk-{i}" for i in range(len(chunks))],
