@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>填空练习 — 补全 retrieve()</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/task.css">
+  <style>
+    /* 本页专用：答案揭晓折叠块（验证格式后再决定是否提升为共享组件） */
+    details.reveal { margin: 1.25rem 0; border: 1px solid var(--border, #d0d7de); border-radius: 6px; background: var(--surface, #f6f8fa); }
+    details.reveal > summary { cursor: pointer; padding: .7rem 1rem; font-weight: 600; list-style: none; }
+    details.reveal > summary::-webkit-details-marker { display: none; }
+    details.reveal > summary::before { content: "🔒 "; }
+    details.reveal[open] > summary::before { content: "🔓 "; }
+    details.reveal[open] > summary { border-bottom: 1px solid var(--border, #d0d7de); }
+    details.reveal .reveal-body { padding: .9rem 1rem; }
+    .blank { background: #fff3bf; padding: 0 .15em; border-radius: 3px; font-weight: 700; }
+    html.dark details.reveal { border-color: #30363d; background: #161b22; }
+    html.dark .blank { background: #5a4a1f; color: #ffd970; }
+  </style>
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">练习 · 填空格式 demo</span>
+  <h1>补全 <code>retrieve()</code>：两处空白</h1>
+  <p class="lesson-subtitle">骨架已搭好 —— 你只填「承载新概念」的两行，boilerplate 全部给你</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 5–10 分钟</span>
+    <span><span class="tag tag-rag">动手课</span></span>
+    <span>🔗 衔接 <a href="0004-rag-mvp.html">Lesson 0004</a></span>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<div class="callout callout-concept">
+  <div class="callout-title">💡 这个格式在测什么</div>
+  <p>上一课你「整段复制 → 跑 → 读懂」。这次骨架照旧全给你，但把<strong>真正承载概念的那两行</strong>挖空（标 <span class="blank">①③</span>），逼你从脑子里<strong>回忆</strong>而不是<strong>认读</strong>。纯 API 记忆的行（标 ②）直接给你 —— 因为那种东西你一辈子都会查文档/靠自动补全，不值得占用你有限的学习时间。<strong>这是 Matt Pocock 教学法的核心：在「全抄」和「全写」之间，精确狙击要学的那几行。</strong></p>
+</div>
+
+<!-- ================================================================== -->
+<h2>任务：填两处空白</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">1</span>
+    打手：补全 retrieve()
+  </div>
+  <p class="task-goal">目标：打开下面的练习文件，把 <code>retrieve()</code> 里两处 <span class="blank">____</span> 填上，让检索跑通。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>打开 <code>src/teach_ai/exercise_retrieve_cloze.py</code>，找到 <code>retrieve()</code> 方法。整个类只有这一个方法需要你改，其余别动。要填的是这两行：</p>
+<pre><code>def retrieve(self, query, k=3):
+    """检索 top-k 相关 chunk，返回 (chunks, similarities)。"""
+    # ① 把 query 转成向量（必须和文档用同一个 embedding 模型 → 复用 self._embed）。
+    #    _embed 接受「列表」、返回「列表」，所以包一层 [query] 再取 [0]。
+    query_vec = ____
+
+    # ② 查 ChromaDB —— 这行直接给你：API 的 kwarg 名没必要死记，用到时查文档即可。
+    results = self.collection.query(query_embeddings=[query_vec], n_results=k)
+
+    # ChromaDB 把结果按「第几次查询」嵌套；这里只查了 1 次 → documents/distances 都取 [0]
+    chunks = results["documents"][0]
+
+    # ③ ⭐ 核心概念：把 cosine distance 换算回 cosine similarity。
+    #    distance 越小 = 越相似，所以 相似度 = 1 − distance。
+    sims = [____ for dist in results["distances"][0]]
+
+    return chunks, sims</code></pre>
+      <p>填之前<strong>先别看 <code>rag.py</code></strong>。两处空白的提示已经写在注释里，先靠回忆试一下 —— 卡住了再瞄你自己的 <code>src/teach_ai/rag.py</code> 第 44–51 行（那就是答案）。</p>
+    </li>
+    <li>
+      <p>在项目根目录运行：</p>
+      <pre><code>uv run python src/teach_ai/exercise_retrieve_cloze.py</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 自检：看输出对不对</div>
+    <p>程序会打印 top-3 chunk 和它们的相似度。判断标准：</p>
+    <ul>
+      <li><strong>top-1 的 sim ≈ 0.6–0.85</strong> → ③ 填对了，检索正常。</li>
+      <li><strong>sim ≈ 1.3+</strong> → ③ 填反了（应该是 <code>1 − dist</code>，不是 <code>1 + dist</code>）。<em>这个错误正是「认读」会漏掉、「回忆」才会暴露的典型坑。</em></li>
+      <li><strong>NameError: ____</strong> → 还有空白没填。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<details class="reveal">
+  <summary>卡住了？点开看 retrieve() 完整答案</summary>
+  <div class="reveal-body">
+    <p>先确认你真的试过。下面是你那两处空白的答案：</p>
+<pre><code>def retrieve(self, query, k=3):
+    query_vec = self._embed([query])[0]
+    results = self.collection.query(query_embeddings=[query_vec], n_results=k)
+    chunks = results["documents"][0]
+    sims = [1 - dist for dist in results["distances"][0]]
+    return chunks, sims</code></pre>
+    <p>对照一下你卡在哪一处 —— <strong>那一处就是你这次真正要带走的知识点</strong>。这比「整段抄一遍」精确得多。</p>
+  </div>
+</details>
+
+<!-- ================================================================== -->
+<h2>做完之后：一个判断</h2>
+
+<div class="callout callout-mission">
+  <div class="callout-title">🎯 这个格式适合你吗？</div>
+  <p>跑通之后，问自己一个问题：<strong>「填这两处空白时，我有没有比『抄整段』更用力地想了一下？」</strong></p>
+  <ul>
+    <li>如果<strong>有</strong>，而且没觉得卡到没效率 → 这个格式值得从 Week 2（LangChain）开始正式采用，我会把 lesson 里的代码块都改成「填空 + 改造」为主、完整答案折叠在最下面。</li>
+    <li>如果<strong>太简单</strong>（你秒填、没思考）→ 下一版我会把空白挖得更大（比如整个方法留空、只给 hint），或加「改造」任务（"把 <code>SIM_THRESHOLD</code> 改成命令行参数"）。</li>
+    <li>如果<strong>太卡/不爽</strong> → 告诉我卡在哪，我调空白的粒度。填空不是越难越好，是要卡在「刚好要回忆一下」的点上。</li>
+  </ul>
+  <p>把感受贴给我 —— 这决定了后面所有 lesson 的代码练习长什么样。</p>
+</div>
+
+<!-- ================================================================== -->
+<nav class="lesson-nav">
+  <a href="0004-rag-mvp.html">← Lesson 0004: 可信文档问答 MVP</a>
+  <a href="0005-langchain-lcel.html">Lesson 0005: LangChain / LCEL →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · 填空格式 demo · 2026</p>
+</footer>
+
+<script src="../assets/copy-code.js" defer></script>
+</body>
+</html>
