@@ -1,0 +1,54 @@
+/* ==========================================================================
+   Reveal + Cloze — shared components for fill-in-the-blank lessons.
+   Promoted from lessons/exercise-0004-retrieve-cloze.html (was inline).
+   Two pieces, always used together in a cloze lesson:
+
+     <link rel="stylesheet" href="../assets/reveal.css">
+
+     <p>...把 <span class="blank">____</span> 填上...</p>
+
+     <details class="reveal">
+       <summary>卡住了？点开看答案</summary>
+       <div class="reveal-body"> ... </div>
+     </details>
+   ========================================================================== */
+
+/* ---------- Collapsible answer / solution block ---------- */
+details.reveal {
+  margin: 1.25rem 0;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: var(--c-bg-alt);
+}
+
+details.reveal > summary {
+  cursor: pointer;
+  padding: .7rem 1rem;
+  font-weight: 600;
+  list-style: none;
+}
+
+details.reveal > summary::-webkit-details-marker { display: none; }
+
+details.reveal > summary::before { content: "🔒 "; }
+
+details.reveal[open] > summary::before { content: "🔓 "; }
+
+details.reveal[open] > summary {
+  border-bottom: 1px solid var(--c-border);
+}
+
+details.reveal .reveal-body { padding: .9rem 1rem; }
+
+/* ---------- Inline blank highlight (inside cloze code/prose) ---------- */
+.blank {
+  background: #fff3bf;
+  padding: 0 .15em;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+@media (prefers-color-scheme: dark) {
+  details.reveal { border-color: #30363d; background: #161b22; }
+  .blank { background: #5a4a1f; color: #ffd970; }
+}

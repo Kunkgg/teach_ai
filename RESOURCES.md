@@ -9,8 +9,18 @@
 ### LangChain / LangGraph
 
 - **LangChain Python Docs** ✅ 已验证
-  - URL: https://python.langchain.com/docs/introduction/
+  - URL: https://python.langchain.com/docs/introduction/（已迁移到新域名 https://docs.langchain.com/oss/python/，旧链接会 308 跳转）
   - 备注: LCEL、Prompt Templates、Output Parsers 的权威参考
+  - 适用: Week 2
+
+- **LangChain — LLM Chain 教程** ✅ 已验证
+  - URL: https://python.langchain.com/docs/tutorials/llm_chain/
+  - 备注: 从 `ChatPromptTemplate` 一路搭到 `prompt | llm | parser` 的官方手把手教程。Lesson 0005 的主源——和用户写的代码几乎逐行对应
+  - 适用: Week 2（Lesson 0005）
+
+- **langchain-openai 集成文档** ✅ 已验证
+  - URL: https://python.langchain.com/docs/integrations/chat/openai/
+  - 备注: `ChatOpenAI` 的 `api_key=` / `base_url=` 用法（指向 DeepSeek 等 OpenAI 兼容端点）。注意官方说明 ChatOpenAI 只针对 OpenAI 标准——标准 chat 没问题，厂商私有扩展字段不保留
   - 适用: Week 2
 
 - **LangGraph Docs** ✅ 已验证

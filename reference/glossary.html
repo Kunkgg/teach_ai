@@ -218,9 +218,9 @@
   <span class="glossary-term-en">LangChain</span>
   <span class="glossary-term-zh">—</span>
   <div class="glossary-def">
-    <p>一个用于构建 LLM 应用的 Python 框架。提供 Prompt Templates、Output Parsers、Tool Calling、Document Loaders 等组件。用 LCEL（LangChain Expression Language）组合这些组件。</p>
+    <p>一个用于构建 LLM 应用的 Python 框架。提供 Prompt Templates、Output Parsers、Tool Calling、Document Loaders 等组件，用 <a href="#lcel">LCEL</a> 组合它们。核心抽象：<strong>每个组件都是 <a href="#runnable">Runnable</a></strong>，接口统一（都有 <code>.invoke()</code>），所以能像积木一样任意串联。<code>langchain-openai</code> 是接 OpenAI 兼容模型（如 DeepSeek）的子包。</p>
   </div>
-  <p class="glossary-related">相关: <a href="#lcel">LCEL</a>, <a href="#langgraph">LangGraph</a></p>
+  <p class="glossary-related">首见: <a href="../lessons/0005-langchain-lcel.html">Lesson 0005</a> · 相关: <a href="#lcel">LCEL</a>, <a href="#runnable">Runnable</a>, <a href="#langgraph">LangGraph</a></p>
 </div>
 
 <div class="glossary-entry" id="lcel">
@@ -228,9 +228,9 @@
   <span class="glossary-term-en">LangChain Expression Language</span>
   <span class="glossary-term-zh">LangChain 表达语言</span>
   <div class="glossary-def">
-    <p>LangChain 中用 <code>|</code>（pipe 管道符）将组件串联的声明式语法。如 <code>prompt | llm | parser</code> 表示 "先填充 prompt，送给 LLM，再解析输出"。</p>
+    <p>LangChain 中用 <code>|</code>（pipe 管道符）将组件串联的声明式语法。<code>prompt | llm | parser</code> 表示"先填模板、再调模型、最后解析输出"——上一个组件的输出自动喂给下一个，和 Unix 管道 <code>cat | grep | sort</code> 同理。串联结果是一个 <code>RunnableSequence</code>，用 <code>.invoke({...})</code> 触发整条链。</p>
   </div>
-  <p class="glossary-related">相关: <a href="#langchain">LangChain</a>, <a href="#prompt-template">Prompt Template</a></p>
+  <p class="glossary-related">首见: <a href="../lessons/0005-langchain-lcel.html">Lesson 0005</a> · 相关: <a href="#langchain">LangChain</a>, <a href="#prompt-template">Prompt Template</a>, <a href="#output-parser">Output Parser</a>, <a href="#runnable">Runnable</a></p>
 </div>
 
 <div class="glossary-entry" id="langgraph">
@@ -258,9 +258,29 @@
   <span class="glossary-term-en">Prompt Template</span>
   <span class="glossary-term-zh">提示词模板</span>
   <div class="glossary-def">
-    <p>一个带有占位符的 prompt 格式。运行时用实际数据填充占位符，生成完整的 prompt。类似 Python 的 f-string，但有更多功能（如条件渲染、few-shot examples）。</p>
+    <p>一个带有<strong>占位符</strong>的 prompt 格式。运行时用实际数据填充占位符，生成完整的 prompt。类似 Python 的 f-string，但<strong>模板是独立对象</strong>——可复用、可校验、可塞进 LCEL 链里。构造：<code>ChatPromptTemplate.from_messages([("system", "..."), ("user", "{question}")])</code>，占位符 <code>{question}</code> 在 <code>.invoke({"question": ...})</code> 时填入。</p>
   </div>
-  <p class="glossary-related">相关: <a href="#prompt">Prompt</a>, <a href="#lcel">LCEL</a></p>
+  <p class="glossary-related">首见: <a href="../lessons/0005-langchain-lcel.html">Lesson 0005</a> · 相关: <a href="#prompt">Prompt</a>, <a href="#lcel">LCEL</a></p>
+</div>
+
+<div class="glossary-entry" id="output-parser">
+  <span class="glossary-term">Output Parser</span>
+  <span class="glossary-term-en">Output Parser / StrOutputParser</span>
+  <span class="glossary-term-zh">输出解析器</span>
+  <div class="glossary-def">
+    <p>把 LLM 返回的结构化输出（<code>AIMessage</code>）转换成你想要的形式的组件。<code>StrOutputParser()</code> 最简单：直接抠出 <code>.content</code> 的纯文本（对应手写代码里的 <code>response.choices[0].message.content</code>）。更复杂的 parser 能把文本解析成 JSON / Pydantic 对象、列表等。它是 LCEL 链 <code>prompt | llm | parser</code> 的最后一环。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0005-langchain-lcel.html">Lesson 0005</a> · 相关: <a href="#lcel">LCEL</a>, <a href="#langchain">LangChain</a></p>
+</div>
+
+<div class="glossary-entry" id="runnable">
+  <span class="glossary-term">Runnable</span>
+  <span class="glossary-term-en">Runnable</span>
+  <span class="glossary-term-zh">可运行组件</span>
+  <div class="glossary-def">
+    <p>LangChain 的核心协议/接口。prompt、llm、parser、retriever、整条 chain —— 每一个都是 Runnable，都有统一的 <code>.invoke(input)</code>（还有 <code>.batch()</code>、<code>.stream()</code>、<code>.ainvoke()</code> 异步等）。<strong>正是因为接口统一</strong>，任何 Runnable 的输出都能直接接另一个的输入，才能用 <code>|</code> 随意串联（<a href="#lcel">LCEL</a>）。串联后的整体叫 <code>RunnableSequence</code>，它本身也是 Runnable。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0005-langchain-lcel.html">Lesson 0005</a> · 相关: <a href="#lcel">LCEL</a>, <a href="#langchain">LangChain</a></p>
 </div>
 
 <div class="glossary-entry" id="tool-calling">
