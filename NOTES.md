@@ -28,6 +28,7 @@
 - **2026-08-03**: 初始化教学工作区。完成 Mission 定义、Resources 收集。
 - **2026-08-04**: 用户完成 Lesson 1 四道题，浏览了 roadmap.sh。创建 Lesson 2（LLM API 调用：DeepSeek Chat + 智谱 Embedding + 余弦相似度 + Mini RAG）。
 - **2026-08-05**: 用户完成 Lesson 2，理解了 Mini RAG 流程。新增 `assets/copy-code.js` 组件（所有 `<pre><code>` 代码块一键"复制"按钮，自包含、支持 file://，已应用到 Lesson 1/2/3）。创建 Lesson 3（向量数据库 ChromaDB + 文档切分 Chunking + 端到端 RAG）。API key 从硬编码升级为 `.env` 环境变量（`GLM_KEY` / `DS_KEY`，用户已有 `envs.py`）。Glossary 新增 ANN 词条、丰富 Chunking 词条。
+- **2026-08-05 (续)**: 用户完成 Lesson 3（已验证：`src/teach_ai/05-07.py` 已建、`chroma_db/` 已持久化、git 干净）。ChromaDB distance 配置更正为官方推荐的 `configuration={"hnsw": {"space": ...}}`（旧版 `metadata={"hnsw:space":...}` 已弃用、曾有 bug）。创建 Lesson 4（Week 1 收官）：封装 `rag.py` 模块 + `TrustRAG` 类（`index_documents` / `retrieve` / `ask`）+ 相似度门控防幻觉（`SIM_THRESHOLD` 起始 0.5）+ 来源引用 + 交互式 `qa.py` CLI。**可信文档问答 MVP 达成，Week 1 里程碑完成**。
 
 ## Components (assets/)
 

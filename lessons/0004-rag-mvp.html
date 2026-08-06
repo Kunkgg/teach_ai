@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0004 — 可信文档问答 MVP</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/quiz.css">
+  <link rel="stylesheet" href="../assets/task.css">
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Lesson 0004 · Week 1 收官</span>
+  <h1>可信文档问答 MVP：封装、门控、引用</h1>
+  <p class="lesson-subtitle">把 RAG 打包成可复用模块 + 相似度门控（不瞎编）+ 来源引用（可追溯）</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 45 分钟</span>
+    <span><span class="tag tag-rag">动手课</span></span>
+    <span>📅 Week 1 · Day 4</span>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<h2>Lesson 3 留下的三个缺口</h2>
+
+<p>Lesson 3 的 <code>07_rag_chromadb.py</code> 能跑通 RAG 了，但作为"<strong>可信文档问答 MVP</strong>"还差三件事：</p>
+
+<ol>
+  <li><strong>不可复用。</strong>建索引、检索、生成混在一个脚本里。换个问题要改 <code>query</code> 变量重跑；别的程序想调用它也调不了。</li>
+  <li><strong>不可交互。</strong>没有问答界面，每次都得改代码。</li>
+  <li><strong>最致命 —— 它会瞎编。</strong>问它"今天天气怎么样"，它照样会从那 4 段可信规范里挑一段最不挨边的，编出一套"天气相关的可信构建建议"。<strong>对"可信"系统来说，一本正经地胡说八道比答不出来严重得多。</strong></li>
+</ol>
+
+<p>一个<strong>可信</strong>的问答系统必须做到两件事：</p>
+
+<ul>
+  <li><strong>知道自己不知道</strong> —— 文档里没有就明说，不编（这叫<strong>防幻觉 / anti-hallucination</strong>）</li>
+  <li><strong>说清答案哪来的</strong> —— 附上引用来源，让人能验证（这叫<strong>可追溯 / traceability</strong>）</li>
+</ul>
+
+<div class="callout callout-mission">
+  <div class="callout-title">🎯 这正是"可信看板"的灵魂</div>
+  <p>可信看板的核心价值就是<strong>可追溯</strong> —— 每个工程结论都要能追溯到具体规范。如果 AI 助手给出"建议重构这个模块"，用户必须能点开看到"因为规范第 X 条 + 这段扫描数据"。这节课把"门控 + 引用"做进去，就是给你的 MVP 注入"可信"基因。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ①：从脚本到模块（封装）</h2>
+
+<p>把 Lesson 3 的过程式脚本重构成一个<strong>类</strong>，核心是<strong>关注点分离（separation of concerns）</strong>：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>方法</th>
+      <th>职责</th>
+      <th>调用频率</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>index_documents(text)</code></td>
+      <td>切分 + 向量化 + 存入 ChromaDB</td>
+      <td>文档变更时调一次</td>
+    </tr>
+    <tr>
+      <td><code>retrieve(query)</code></td>
+      <td>检索 top-k 相关 chunk</td>
+      <td>每次提问</td>
+    </tr>
+    <tr>
+      <td><code>ask(query)</code></td>
+      <td>检索 + 门控 + 生成</td>
+      <td>每次提问（对外接口）</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>对外只暴露 <code>ask(question)</code> 一行接口。建索引是"一次性投入"，问答是"反复使用"——把它们分开，索引建一次就能问无数次。</p>
+
+<div class="callout callout-tip">
+  <div class="callout-title">💡 文件命名的小升级</div>
+  <p>前几课的文件是 <code>01_chat.py</code>、<code>07_rag_chromadb.py</code> —— 带编号的独立脚本。这课开始我们写<strong>可导入的模块</strong> <code>rag.py</code>（被别人 <code>import</code>），所以<strong>不带编号</strong>、用语义化命名（编号开头也不能做模块名，Python 不允许数字开头的标识符）。从"一次性脚本"毕业到"可复用模块"，这本身就是工程化的里程碑。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ②：相似度门控（防幻觉的第一道防线）</h2>
+
+<p>问题在哪？<code>retrieve()</code> 永远会返回 top-k 个 chunk —— <strong>哪怕最相关的那个其实也跟问题八竿子打不着</strong>。向量数据库只负责"相对最像"，不负责"到底像不像"。</p>
+
+<p>解法：设一个<strong>相似度阈值（threshold）</strong>。把 ChromaDB 返回的 distance 换算回 cosine similarity（<code>sim = 1 - distance</code>），如果<strong>最相关那条的相似度都低于阈值</strong>，就判定"文档里没有相关信息"，<strong>直接拒答，不调用 LLM</strong>。</p>
+
+<div class="diagram">
+<pre>
+用户提问 → retrieve top-k → 最相关 chunk 的相似度够高吗？
+                              │
+                    ┌─────────┴─────────┐
+                   够高                不够高（&lt; 阈值）
+                    │                    │
+            拼上下文 → LLM 生成      直接答"文档里没有相关信息"
+            （附引用来源）            （不瞎编，省 token，省时间）
+</pre>
+<p class="diagram-caption">图 1：相似度门控 —— 在调用 LLM 之前就拦住"没答案"的问题</p>
+</div>
+
+<div class="callout callout-warning">
+  <div class="callout-title">⚠️ 阈值是经验值，要调</div>
+  <p><code>SIM_THRESHOLD = 0.5</code> 只是个<strong>起点</strong>。不同 embedding 模型、不同语料，相似度分布不同。本课会<strong>把每次检索的相似度打印出来</strong>，你观察一下：相关问题通常 0.6–0.85，无关问题通常 0.2–0.4。根据你的真实数据调整阈值。这是 RAG 工程里最常调的参数之一。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ③：来源引用（可追溯）</h2>
+
+<p>门控解决了"不瞎编"，引用解决"可验证"。<code>ask()</code> 除了返回答案，还返回这次用了哪些 chunk、各自相似度多少。展示给用户，用户就能：<strong>点开原文核对 → 判断 AI 说的靠不靠谱</strong>。</p>
+
+<p>对可信看板：以后每条 AI 建议都能附上"基于规范 chunk-3（相似度 0.81）"，这就是"可信"的工程化落地。</p>
+
+<!-- ================================================================== -->
+<h2>Task ①：把 RAG 封装成 rag.py 模块</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">1</span>
+    动手：写 TrustRAG 类
+  </div>
+  <p class="task-goal">目标：把 Lesson 3 的流程封装成 <code>rag.py</code>，对外暴露 <code>index_documents()</code> 和 <code>ask()</code>。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>创建文件 <code>src/teach_ai/rag.py</code>，写入以下代码：</p>
+<pre><code>import chromadb
+from openai import OpenAI
+from teach_ai.envs import GLM_KEY, DS_KEY
+
+EMBED_MODEL = "embedding-3"
+CHAT_MODEL = "deepseek-v4-flash"
+SIM_THRESHOLD = 0.5   # 低于这个相似度视为"文档里没有" —— 运行后根据观察调整
+
+
+class TrustRAG:
+    """可信文档问答：建索引一次，问答多次。"""
+
+    def __init__(self, db_path="./chroma_db", collection="trust_docs"):
+        self.zhipu = OpenAI(api_key=GLM_KEY, base_url="https://open.bigmodel.cn/api/paas/v4/")
+        self.deepseek = OpenAI(api_key=DS_KEY, base_url="https://api.deepseek.com")
+        self.client = chromadb.PersistentClient(path=db_path)
+        self.collection = self.client.get_or_create_collection(
+            name=collection,
+            configuration={"hnsw": {"space": "cosine"}},
+        )
+
+    @staticmethod
+    def _split(text):
+        """按段落切分（复用 Lesson 3 的切分器）。"""
+        return [p.strip() for p in text.split("\n\n") if p.strip()]
+
+    def _embed(self, texts):
+        """用智谱把文本列表转成向量列表。"""
+        resp = self.zhipu.embeddings.create(model=EMBED_MODEL, input=texts)
+        return [item.embedding for item in resp.data]
+
+    def index_documents(self, text):
+        """切分 → 向量化 → 存入 ChromaDB。建索引，文档变更时调一次即可。"""
+        chunks = self._split(text)
+        vectors = self._embed(chunks)
+        self.collection.upsert(
+            ids=[f"chunk-{i}" for i in range(len(chunks))],
+            documents=chunks,
+            embeddings=vectors,
+            metadatas=[{"index": i} for i in range(len(chunks))],
+        )
+        return len(chunks)
+
+    def retrieve(self, query, k=3):
+        """检索 top-k 相关 chunk，返回 (chunks, similarities)。"""
+        query_vec = self._embed([query])[0]
+        results = self.collection.query(query_embeddings=[query_vec], n_results=k)
+        chunks = results["documents"][0]
+        # cosine distance → cosine similarity（越大越相似）
+        sims = [1 - dist for dist in results["distances"][0]]
+        return chunks, sims
+
+    def ask(self, query, k=3):
+        """问答 = 检索 + 门控 + 生成。返回 (answer, similarities)。"""
+        chunks, sims = self.retrieve(query, k=k)
+
+        # ── 门控：最相关 chunk 的相似度太低 → 文档里没有，不瞎编 ──
+        # sims 已按相似度从高到低排好，sims[0] 就是最相关的那条
+        if not chunks or sims[0] &lt; SIM_THRESHOLD:
+            return "抱歉，文档里没有与该问题相关的信息。", sims
+
+        # ── 通过门控：拼接上下文，调用 DeepSeek 生成 ──
+        context = "\n\n".join(chunks)
+        chat = self.deepseek.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "你是可信工程助手。仅基于参考文档回答，不要编造。"
+                               "文档中没有的信息请明确说明。",
+                },
+                {"role": "user", "content": f"参考文档:\n{context}\n\n问题: {query}"},
+            ],
+            temperature=0.2,
+            max_tokens=400,
+        )
+        return chat.choices[0].message.content, sims</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 检查点</div>
+    <p>这个文件没有顶层的执行代码（没有 <code>if __name__</code>），所以直接运行它不会有输出 —— 它是一个<strong>被导入的模块</strong>。下一 Task 写的程序会 <code>import</code> 它。先确认 <code>python -c "from teach_ai.rag import TrustRAG; print('OK')"</code>（在项目根目录用 <code>uv run</code> 跑）能打印 <code>OK</code>，说明模块无误。</p>
+  </div>
+</div>
+
+<h3>设计要点回顾</h3>
+
+<ul>
+  <li><code>_split</code> / <code>_embed</code> 用下划线开头 —— 约定俗成的"内部方法"，外部不该直接调</li>
+  <li><code>retrieve()</code> 把 distance 换算成 similarity 返回，让门控和引用都用"越大越相似"的直觉（和 Lesson 2 一致）</li>
+  <li><code>ask()</code> 是唯一对外的问答接口，门控逻辑藏在里面，调用方不用关心</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2>Task ②：写交互式问答 qa.py</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">2</span>
+    动手：命令行问答界面
+  </div>
+  <p class="task-goal">目标：写一个能持续提问的 CLI，把答案和<strong>相似度引用</strong>都打印出来。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>创建文件 <code>src/teach_ai/qa.py</code>，写入以下代码：</p>
+<pre><code>from teach_ai.rag import TrustRAG
+
+# 样例文档（和 Lesson 3 同一份）。真实项目里从文件加载 —— 下节会讲
+TRUST_DOCS = """编码规范检查是可信工程的第一道防线。团队通过 ESLint、Pylint、SonarQube 等静态分析工具自动扫描源代码，识别不符合规范的命名、格式、复杂度等问题。检查结果同步到可信看板，按组件维度聚合，指导开发者逐项修复。
+
+可信构建要求在可控、可追溯的环境中执行软件构建。每次构建的源码版本、依赖清单、构建参数都必须完整记录，确保产物与源码的对应关系可验证。这是防范供应链攻击、保证产物完整性的关键环节。
+
+代码度量通过圈复杂度、代码行数、重复率、注释率等量化指标评估代码质量。可信看板将这些指标按模块可视化，帮助团队识别高风险、需重构的模块。通常圈复杂度超过 15 的函数会被标记为需要关注。
+
+组件化是将复杂系统拆分为高内聚、低耦合的独立组件，每个组件有清晰的接口契约和版本管理。可信看板跟踪各组件的接口稳定性、依赖关系和变更频率，以此评估组件化成熟度。"""
+
+
+def main():
+    rag = TrustRAG()
+    n = rag.index_documents(TRUST_DOCS)   # 已索引则 upsert 覆盖，幂等
+    print(f"已索引 {n} 个 chunk 到可信文档库")
+
+    print("\n可信文档问答 MVP（输入 quit 退出）")
+    print("=" * 40)
+
+    while True:
+        query = input("\n你的问题> ").strip()
+        if query.lower() in ("quit", "exit", "q"):
+            print("再见！")
+            break
+        if not query:
+            continue
+
+        answer, sims = rag.ask(query)
+        print(f"\n答: {answer}")
+        scores = ", ".join(f"{s:.2f}" for s in sims)
+        print(f"📚 top-{len(sims)} 相似度: [{scores}]  (阈值 0.50)")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+    </li>
+    <li>
+      <p>在项目根目录运行（注意是 <code>uv run</code>，这样 <code>teach_ai</code> 包能被导入）：</p>
+      <pre><code>uv run python src/teach_ai/qa.py</code></pre>
+    </li>
+  </ol>
+</div>
+
+<!-- ================================================================== -->
+<h2>Task ③：亲手验证"门控"和"引用"</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">3</span>
+    动手：问三类问题，观察相似度
+  </div>
+  <p class="task-goal">目标：用真实提问感受阈值的作用，理解"可信"是如何被工程化的。</p>
+
+  <p>依次输入下面三个问题，重点看每条回答下面的<strong>相似度</strong>：</p>
+
+  <ol class="task-steps">
+    <li>
+      <p><strong>相关问题</strong>（应该在库里）：</p>
+      <pre><code>代码圈复杂度超过多少需要关注？</code></pre>
+      <p>预期：top-1 相似度 0.6 以上，DeepSeek 给出基于文档的回答（提到 15）。</p>
+    </li>
+    <li>
+      <p><strong>擦边问题</strong>（主题相关但库里没有细节）：</p>
+      <pre><code>可信构建具体用的是什么构建工具？</code></pre>
+      <p>预期：相似度中等。看它是否会"老实说文档里没提工具名"——这考验 system prompt + 模型的诚实度。</p>
+    </li>
+    <li>
+      <p><strong>完全无关的问题</strong>（库外）：</p>
+      <pre><code>怎么做红烧肉？</code></pre>
+      <p>预期：top-1 相似度跌到 0.4 以下（低于阈值 0.5），系统<strong>直接拒答</strong>，根本不调用 LLM。这就是门控在工作。</p>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 检查点：你应该体会到的</div>
+    <p>第三题被拦在 LLM 之前 —— <strong>它不会用红烧肉的问题去编造一段"可信构建红烧肉指南"</strong>。这就是 Lesson 3 那个会瞎编的脚本和现在这个 MVP 的本质区别。<strong>如果某题明明相关却被拒答</strong>，把 <code>SIM_THRESHOLD</code> 调低（比如 0.4）再试；<strong>如果无关题没被拦住</strong>，调高（比如 0.55）。这就是调阈值的过程。</p>
+  </div>
+</div>
+
+<div class="callout callout-concept">
+  <div class="callout-title">💡 门控只是防幻觉的起点</div>
+  <p>相似度阈值拦得住"完全不相关"的问题，但拦不住"检索到看似相关、实则不对的 chunk，然后 LLM 据此发挥"的情况。生产级 RAG 还会用 <strong>reranking（重排）</strong>、<strong>LLM-as-judge（让另一个 LLM 判断答案是否真的有依据）</strong>、<strong>引用精确匹配</strong>等手段。这些在 Week 2–4 会逐步引入。现在先掌握最基础也最有效的一道防线。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识检验</h2>
+
+<div class="quiz" data-quiz-id="l4q1">
+  <p class="quiz-question">Q1: 相似度门控（relevance threshold）在 RAG 中的核心作用是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option" data-correct="true">在调用 LLM 之前拦住"文档里没有答案"的问题，防止模型瞎编</button>
+    <button class="quiz-option">把检索速度提升几个数量级，让向量数据库的查询更快返回</button>
+    <button class="quiz-option">自动把过长的 chunk 切短，确保每个片段都不超过 context window</button>
+    <button class="quiz-option">把不同厂商的 embedding 向量统一到同一个维度便于比较</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l4q2">
+  <p class="quiz-question">Q2: 为什么要把 index_documents 和 ask 分成两个独立的方法？</p>
+  <div class="quiz-options">
+    <button class="quiz-option" data-correct="true">建索引只需一次，问答可反复调用，分开后避免重复向量化浪费 API</button>
+    <button class="quiz-option">因为 Python 规定一个类里不能同时有建索引和问答的逻辑</button>
+    <button class="quiz-option">为了让 DeepSeek 和智谱两个客户端分别只在一个方法里被初始化</button>
+    <button class="quiz-option">因为 ChromaDB 的 collection 每次问答后必须重建否则会丢失数据</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l4q3">
+  <p class="quiz-question">Q3: ChromaDB 配置 cosine 空间时，distance 0.7 对应的 cosine similarity 是多少？</p>
+  <div class="quiz-options">
+    <button class="quiz-option" data-correct="true">0.3（相似度 = 1 − 距离，距离越小越相似）</button>
+    <button class="quiz-option">0.7（距离和相似度数值相同，只是叫法不同）</button>
+    <button class="quiz-option">1.7（相似度 = 距离 + 1，距离越大相似度越高）</button>
+    <button class="quiz-option">无法换算，cosine 距离和相似度是两个独立的量</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l4q4">
+  <p class="quiz-question">Q4: 为什么"来源引用（citation）"对可信看板这类系统特别重要？</p>
+  <div class="quiz-options">
+    <button class="quiz-option" data-correct="true">它让每条 AI 结论都能追溯到具体规范文档，用户可验证、可追责</button>
+    <button class="quiz-option">它能自动把答案翻译成英文，方便跨国团队协作阅读</button>
+    <button class="quiz-option">它能减少 token 消耗，因为引用比完整文档占用更少的字数</button>
+    <button class="quiz-option">它让向量数据库的检索速度变快，因为有索引可以加速</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<!-- ================================================================== -->
+<h2>🎉 Week 1 回顾：你已经走了多远</h2>
+
+<p>四节课，你从零搭起了一个<strong>能 demo 的可信文档问答 MVP</strong>。回顾这条线：</p>
+
+<div class="diagram">
+<pre>
+Lesson 1  AI 工程全景图        —— 知道学什么、跳过什么
+Lesson 2  LLM API 第一次调用    —— DeepSeek Chat + 智谱 Embedding + 余弦相似度 + Mini RAG
+Lesson 3  向量数据库 + Chunking —— ChromaDB 持久化 + 文档切分 + 端到端 RAG
+Lesson 4  可信文档问答 MVP      —— 封装成模块 + 相似度门控（不瞎编）+ 来源引用（可追溯）
+                                     ↓
+                          🏆 一个能拿出去 demo 的 MVP
+</pre>
+<p class="diagram-caption">图 2：Week 1 的完整弧线 —— 从 API 调用到可信问答 MVP</p>
+</div>
+
+<p>你现在的 MVP 已经具备一个真实 RAG 应用的所有骨架：<strong>文档切分、向量检索、防幻觉门控、来源引用、可复用接口</strong>。把它讲给面试官听，这是一个完整的、有工程思考的项目。</p>
+
+<div class="callout callout-mission">
+  <div class="callout-title">🎯 Milestone：可信文档问答 MVP 达成</div>
+  <p>MISSION.md 里 Week 1 的产出是"可信文档问答 MVP"。<strong>你现在有了。</strong>建议把 <code>rag.py</code> + <code>qa.py</code> 整理一下提交到 git，作为 Week 1 的阶段性成果。后面 LangChain 会用更优雅的方式重写它，但这份"手写版"是你理解一切框架的基础。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>Week 2 预告：LangChain / LCEL</h2>
+
+<p>Week 1 你<strong>手写</strong>了 RAG 的每一步。Week 2 我们引入 <strong>LangChain / LCEL</strong>，用框架把这套流程重写得更简洁、更可组合：</p>
+
+<ul>
+  <li><strong>Prompt Template</strong>：把 system/user 模板化，告别 f-string 手拼</li>
+  <li><strong>LCEL 管道</strong>：<code>retriever | prompt | llm | parser</code> 一行串起整个 RAG</li>
+  <li><strong>Document Loaders + RecursiveCharacterTextSplitter</strong>：从真实文件加载、智能切分</li>
+  <li><strong>Tool Calling</strong>：让 LLM 主动调用工具（可信看板数据分析的入口）</li>
+</ul>
+
+<p>你会清楚看到：<strong>框架没有做魔法，它只是把你 Week 1 手写的步骤封装成了可组合的积木。</strong>因为你手写过，所以你能看穿框架、定位问题、做技术选型——这正是面试官想听到的的那种理解深度。</p>
+
+<div class="callout callout-tip">
+  <div class="callout-title">📖 推荐阅读（Week 1 收尾）</div>
+  <p>花 15–20 分钟读 <a href="https://www.pinecone.io/learn/retrieval-augmented-generation/" target="_blank">Pinecone Learn — Retrieval Augmented Generation (RAG)</a>。这是公认最好的 RAG 概念综述之一。重点看它讲的 RAG 流程（retrieve → augment → generate）和你这周做的一一对应，以及它提到的"检索质量"挑战（正好呼应你的门控）。不用全读完，建立整体地图即可。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>参考文档</h2>
+
+<ul>
+  <li>📘 <a href="../reference/glossary.html">术语表 (Glossary)</a></li>
+  <li>📘 <a href="0003-vector-db-chunking.html">Lesson 0003：向量数据库与文档切分</a>（本课的代码基础）</li>
+  <li>📘 <a href="https://www.pinecone.io/learn/retrieval-augmented-generation/" target="_blank">Pinecone Learn — RAG 综述</a></li>
+  <li>📘 <a href="https://docs.trychroma.com/docs/collections/configure" target="_blank">ChromaDB — Configure Collections（distance 配置）</a></li>
+</ul>
+
+<!-- ================================================================== -->
+
+<div class="callout callout-concept">
+  <div class="callout-title">💬 有疑问？</div>
+  <p>门控阈值怎么调、类怎么设计、运行报错，都随时贴给我。完成 Week 1 后，用 <code>/teach</code> 开启 Week 2（LangChain）。如果想先用这个 MVP 查询你自己项目的真实文档，也可以告诉我，我帮你接 Document Loader。</p>
+</div>
+
+<nav class="lesson-nav">
+  <a href="0003-vector-db-chunking.html">← Lesson 0003: 向量数据库与文档切分</a>
+  <a href="0005-langchain-lcel.html">Lesson 0005: LangChain / LCEL 入门 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · Mission: 从 Python 全栈到 AI 工程师 · 2026</p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+<script src="../assets/copy-code.js" defer></script>
+</body>
+</html>
