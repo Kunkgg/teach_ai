@@ -155,7 +155,9 @@
   <span class="glossary-term-en">Embedding / Vector Embedding</span>
   <span class="glossary-term-zh">嵌入/向量嵌入</span>
   <div class="glossary-def">
-    <p>把文本（或其他数据）转换成一个高维度的数字向量（如 1536 维）。语义相似的文本，其向量在空间中的距离更近。用于相似度搜索。</p>
+    <p>把文本（或其他数据）转换成一个高维度的数字向量（embedding-3 = 2048 维）。它不是意义的"哲学编码"，而是<strong>意义的统计学代理</strong>——模型经对比训练（contrastive training）学到一个映射：人类觉得相似的文本在向量空间里靠近，无关的推开，于是 <strong>cosine 距离 ≈ 语义相似度</strong>。</p>
+    <p><strong>关键性质：</strong>① <strong>有损</strong>——任意长度文本压成定长向量必然丢信息，是个语义指纹；② <strong>维度不可解释</strong>——各维是潜变量、分布式（latent / distributed），没有"第 1 维=情感"这种含义，语义住在整个向量的<strong>方向</strong>里（类比 JPEG 系数，非 RGB 像素）；支持指定维度的模型用 <em>Matryoshka 表示学习</em>，靠前的维度承载更多通用语义，但单维仍不可解释；③ <strong>归一化</strong>——返回前 L2 归一化，向量落在单位超球面（norm=1），故 cosine ∈ [-1, 1]。</p>
+    <p><strong>局限与陷阱：</strong>embedding 擅长<strong>主题相似</strong>，弱于<strong>精细句法、逻辑方向、否定</strong>（"A 打败 B" vs "B 打败 A" 常分不清）；<strong>任何字符串都有向量</strong>，连无意义 token 拼接也能得到 ~0.5 的相似度，可能骗过阈值门控——所以门控只是防幻觉第一道防线。实测见 <code>src/teach_ai/09_embedding_probe.py</code>，详解见 <a href="../learning-records/0006-embedding-internals-deep-dive.md">学习记录 0006</a>。</p>
   </div>
   <p class="glossary-related">首见: <a href="../lessons/0001-ai-engineering-landscape.html">Lesson 0001</a> · 相关: <a href="#vector-db">Vector Database</a>, <a href="#cosine-similarity">Cosine Similarity</a></p>
 </div>
@@ -176,6 +178,7 @@
   <span class="glossary-term-zh">近似最近邻</span>
   <div class="glossary-def">
     <p>向量数据库用来加速检索的索引算法（ChromaDB 用 HNSW）。不保证找到全局最优解，但用极小的精度损失换取近似 O(log n) 的检索速度（对比暴力搜索的 O(n)）。在 RAG 场景里这点近似完全可以接受。</p>
+    <p><strong>局限：</strong>ANN 是在<strong>已经有损</strong>的 embedding 之上<strong>再近似一层</strong>，加上 embedding 本身弱于精细语义 → 检索结果可能"主题对、细节错"。所以生产 RAG 在 ANN 之后还要 <strong>rerank（重排）</strong> + 相似度阈值兜底，而非直接信任 top-k。</p>
   </div>
   <p class="glossary-related">首见: <a href="../lessons/0003-vector-db-chunking.html">Lesson 0003</a> · 相关: <a href="#vector-db">Vector Database</a>, <a href="#cosine-similarity">Cosine Similarity</a></p>
 </div>
