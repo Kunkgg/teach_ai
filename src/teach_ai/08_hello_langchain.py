@@ -6,6 +6,7 @@
 运行（项目根目录）：
     uv run python src/teach_ai/08_hello_langchain.py
 """
+
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -26,18 +27,23 @@ llm = ChatOpenAI(
 #   传一个「列表」，两条消息（顺序就是 system → user）：
 #     ("system", "你是可信工程助手，帮助开发者理解编码规范和可信构建流程。")
 #     ("user", "{question}")
-prompt = None
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", "你是可信工程助手，帮助开发者理解编码规范和可信构建流程。"),
+        ("user", "{question}, 输出风格: {tone}"),
+    ]
+)
 
 # ── 三块积木之三：输出解析器（把 LLM 返回的 AIMessage 里的文本抠出来）────────
 parser = StrOutputParser()
 
 # ── ⭐ 核心一行：LCEL 管道，用 | 把三块积木按顺序串起来 ───────────────────────
 # TODO(④): 用管道符 | 把 prompt → llm → parser 这个顺序串起来，赋值给 chain。
-chain = None
+chain = prompt | llm | parser
 
 # ── 触发：填入占位符 {question}，跑通整条链（answer 就是一段纯文本字符串）────
-answer = chain.invoke({"question": "什么是编码规范检查？用一句话解释。"})
-print(answer)
+# answer = chain.invoke({"question": "什么是编码规范检查？用一句话解释。"})
+# print(answer)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -49,3 +55,8 @@ print(answer)
 #      各跑一次，对比两份答案。
 #   这正是 Prompt Template 比 f-string 强的地方：同一套模板、不同输入，复用同一条 chain。
 # ════════════════════════════════════════════════════════════════════════════
+
+answer_brief = chain.invoke({"question": "什么是编码规范检查？", "tone": "简洁"})
+print(answer_brief)
+answer_detail = chain.invoke({"question": "什么是编码规范检查？", "tone": "详细举例"})
+print(answer_detail)
