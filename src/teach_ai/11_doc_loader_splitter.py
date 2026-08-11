@@ -19,7 +19,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 # TODO(①): 用 TextLoader 加载可信编码规范文档
 #   参数 1: 文件路径 "src/teach_ai/trust_spec.md"
 #   参数 2: encoding="utf-8"
-loader = ____
+fn = "src/teach_ai/trust_spec.md"
+loader = TextLoader(fn, encoding="utf-8")
 
 docs = loader.load()
 print(f"✅ 加载了 {len(docs)} 个 Document 对象")
@@ -34,11 +35,11 @@ print()
 #   参数 2: chunk_overlap=30  （相邻 chunk 重叠 30 字符，防断裂）
 #   参数 3: separators=["\n\n", "\n", "。", " ", ""]
 #            （先按段落、再按行、再按句号、再按空格、最后逐字符——这就是"递归"的含义）
-splitter = ____
+splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=30, separators=["\n\n", "\n", "。", ",", ""])
 
 # TODO(③): 把 docs 切分成 chunks
 #   提示：用 splitter 的哪个方法？split_text 接收 str，split_documents 接收 list[Document]
-chunks = ____
+chunks = splitter.split_documents(docs)
 
 # ── 3. 展示结果 ──
 print(f"切分为 {len(chunks)} 个 chunks:\n")
