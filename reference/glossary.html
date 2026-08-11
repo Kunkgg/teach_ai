@@ -330,6 +330,46 @@
 </div>
 
 <!-- ================================================================== -->
+<h2>文档加载与切分</h2>
+
+<div class="glossary-entry" id="document">
+  <span class="glossary-term">Document</span>
+  <span class="glossary-term-en">Document (LangChain)</span>
+  <span class="glossary-term-zh">文档对象</span>
+  <div class="glossary-def">
+    <p>LangChain 中表示一段文本的核心数据结构。包含两个字段：<code>page_content</code>（文本内容，<code>str</code>）和 <code>metadata</code>（元数据字典，如来源文件路径、页码等）。RAG 全流程中的数据载体——从 Document Loader 加载到 Text Splitter 切分再到 VectorStore 存储，都围绕这个对象流转。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0007-doc-loader-splitter.html">Lesson 0007</a> · 相关: <a href="#document-loader">Document Loader</a>, <a href="#rcts">RecursiveCharacterTextSplitter</a></p>
+</div>
+
+<div class="glossary-entry" id="document-loader">
+  <span class="glossary-term">Document Loader</span>
+  <span class="glossary-term-en">Document Loader</span>
+  <span class="glossary-term-zh">文档加载器</span>
+  <div class="glossary-def">
+    <p>从各种来源（本地文件、网页、数据库、API）将数据加载为 <a href="#document">Document</a> 对象的组件。最简单的 <code>TextLoader</code> 把文件内容原样读入一个 Document，自动将文件路径写入 <code>metadata["source"]</code>。其他常用：<code>DirectoryLoader</code>（批量加载目录）、<code>UnstructuredMarkdownLoader</code>（按元素解析 Markdown）。</p>
+    <p><strong>注意：</strong><code>TextLoader</code> 目前在 <code>langchain-community</code> 包中，但该包正在被 sunset。功能极简，底层就是 <code>open().read()</code> + 包装 Document。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0007-doc-loader-splitter.html">Lesson 0007</a> · 相关: <a href="#document">Document</a>, <a href="#chunking">Chunking</a></p>
+</div>
+
+<div class="glossary-entry" id="rcts">
+  <span class="glossary-term">RecursiveCharacterTextSplitter</span>
+  <span class="glossary-term-en">RecursiveCharacterTextSplitter (RCTS)</span>
+  <span class="glossary-term-zh">递归字符文本切分器</span>
+  <div class="glossary-def">
+    <p>LangChain 最常用的文本切分器。按<strong>分隔符优先级列表</strong>从粗到细递归切分文本：先按段落（<code>\n\n</code>），太大就降到行（<code>\n</code>），再降到句号/空格/逐字符。关键参数：</p>
+    <ul>
+      <li><code>chunk_size</code>：每个 chunk 的最大字符数</li>
+      <li><code>chunk_overlap</code>：相邻 chunk 重叠的字符数，防止边界处丢失上下文</li>
+      <li><code>separators</code>：分隔符优先级列表。<strong>中文文档需补 <code>"。"</code> 等标点</strong>，否则会从段落直接跳到空格</li>
+    </ul>
+    <p>手写 <code>text.split("\n\n")</code> 相当于只用了 RCTS 的第一级分隔符，且无 chunk_size 限制和 overlap。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0007-doc-loader-splitter.html">Lesson 0007</a> · 相关: <a href="#chunking">Chunking</a>, <a href="#document">Document</a>, <a href="#rag">RAG</a></p>
+</div>
+
+<!-- ================================================================== -->
 
 <footer class="lesson-footer">
   <p>本术语表随课程持续更新 · AI Engineering 教学工作区 · 2026</p>

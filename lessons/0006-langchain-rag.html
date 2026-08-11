@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0006 — LCEL 重写 RAG</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/quiz.css">
+  <link rel="stylesheet" href="../assets/task.css">
+  <link rel="stylesheet" href="../assets/reveal.css">
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Lesson 0006</span>
+  <h1>LCEL 重写 RAG：从 60 行手写到 6 行组装</h1>
+  <p class="lesson-subtitle">VectorStore Retriever 与 RunnablePassthrough</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 30–40 分钟</span>
+    <span><span class="tag tag-langchain">动手课</span></span>
+    <span>📅 Week 2</span>
+  </div>
+</header>
+
+<div class="callout callout-concept">
+  <div class="callout-title">💡 为什么我们要手写一遍再用框架？</div>
+  <p>在 Week 1，你写了 60 行代码实现了 <code>TrustRAG.retrieve()</code> 和 <code>ask()</code>，自己计算相似度并实现了门控。现在，我们要用 LangChain 的核心组件把这段逻辑压缩到几行。因为你手写过，你会看穿：<strong>LangChain 没有做任何魔法，它只是把你写过的循环和条件判断，封装成了标准组件。</strong></p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ①：把向量库变成 Retriever (检索器)</h2>
+
+<p>在手写版的 <code>rag.py</code> 里，你的检索逻辑是：</p>
+<pre><code>query_vec = self._embed([query])[0]
+results = self.collection.query(query_embeddings=[query_vec], n_results=k)
+# 然后把 distance 转换成 similarity
+sims = [1 - dist for dist in results["distances"][0]]
+# 门控：判断 sims[0] < SIM_THRESHOLD</code></pre>
+
+<p>LangChain 提供了一个专门包 <code>langchain-chroma</code>。只需两步，它就能替你干完上面所有的活：</p>
+
+<pre><code>from langchain_chroma import Chroma
+from langchain_openai import OpenAIEmbeddings
+
+# 1. 连上你 Week 1 的数据库（数据还在！）
+vectorstore = Chroma(
+    collection_name="trust_docs",
+    embedding_function=OpenAIEmbeddings(...),
+    persist_directory="./chroma_db",
+)
+
+# 2. 把它变成一个标准的 Retriever，并自带相似度门控
+retriever = vectorstore.as_retriever(
+    search_type="similarity_score_threshold",
+    search_kwargs={"score_threshold": 0.5, "k": 3}
+)</code></pre>
+
+<p>这个 <code>retriever</code> 是一个标准的积木（实现了 <code>Runnable</code> 接口）。只要给它传一个字符串 <code>"什么是编码规范检查？"</code>，它就会吐出大于 0.5 分的文档列表。如果都低于 0.5 分，它就直接返回空列表 <code>[]</code>。</p>
+
+<div class="callout callout-warning">
+  <div class="callout-title">⚠️ 深坑预警：OpenAIEmbeddings 与非 OpenAI 模型</div>
+  <p>在刚才的 <code>10_rag_lcel.py</code> 中，你可能注意到我们在 <code>OpenAIEmbeddings</code> 里加了一行 <strong><code>check_embedding_ctx_length=False</code></strong>。这是一个极其经典的 AI 工程大坑！</p>
+  <p>如果不加这行，LangChain 默认会以为你在用原版 OpenAI，于是私下用 OpenAI 的 <code>tiktoken</code> 分词器把你的中文（比如"什么是..."）切成了 token 整数数组（如 <code>[6271, 222, ...]</code>）发给智谱 API。智谱拿到一堆整数完全看不懂，直接把它们当成<strong>无意义乱码</strong>进行了 embedding 计算！这导致算出来的向量和原本的文本十万八千里，相似度暴跌到 0.2，直接被 0.5 的阈值无情拦截。加上这行参数后，LangChain 就会老老实实发送原始字符串了。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ②：LCEL 兵分两路 —— RunnablePassthrough</h2>
+
+<p>有了 <code>retriever</code>，再加上我们在 Lesson 5 学的 <code>prompt | llm | parser</code>，怎么把它们拼成一条完整的 RAG 链？</p>
+<p>难点在于：<code>prompt</code> 需要两个占位符变量：<code>{context}</code> 和 <code>{question}</code>。但最开始用户的输入只有一个字符串，比如 <code>"什么是编码规范检查？"</code>。</p>
+<p>所以，我们需要在输入 <code>prompt</code> 之前，把数据<strong>兵分两路</strong>：</p>
+<ul>
+  <li><strong>左路（给 context 填值）</strong>：把查询词交给 retriever 去找文档，找到后拼成一大段文本。</li>
+  <li><strong>右路（给 question 填值）</strong>：什么都不干，把查询词<strong>原样透传</strong>过去。</li>
+</ul>
+
+<p>在 LCEL 中，用字典就能实现这种并行处理：</p>
+
+<pre><code>from langchain_core.runnables import RunnablePassthrough
+
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
+
+# 并行数据准备
+setup_and_retrieval = {
+    "context": retriever | format_docs,   # 左路：检索 -> 拼文本
+    "question": RunnablePassthrough()     # 右路：原样透传
+}</code></pre>
+
+<div class="diagram">
+<pre>
+                      /-- [retriever | format_docs] --\
+"问题字符串" -> 兵分两路                                 字典: {"context": 文本, "question": 问题} -> prompt
+                      \-- [RunnablePassthrough()] ----/
+</pre>
+<p class="diagram-caption">图 1：用字典和 RunnablePassthrough 并行准备 Prompt 数据</p>
+</div>
+
+<p>至此，数据变成了 <code>prompt</code> 需要的字典格式，后面只要 <code>| prompt | llm | parser</code> 一把梭就完事了。</p>
+
+<!-- ================================================================== -->
+<h2>Task ①：填空 —— 写 10_rag_lcel.py</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">1</span>
+    动手：填两处空白，拼出 LCEL RAG 链
+  </div>
+  <p class="task-goal">目标：骨架已搭好，你只填<strong>检索器配置 ② 和 链组装 ④</strong>，跑通后输出应该和 Week 1 的 MVP 问答结果一致。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>打开 <code>src/teach_ai/10_rag_lcel.py</code>，填补只有两处的空白。</p>
+<pre><code># TODO(②): 把 vectorstore 变成 retriever，并加上相似度门控
+#   参数 1：search_type="similarity_score_threshold"
+#   参数 2：search_kwargs={"score_threshold": 0.5, "k": 3}
+retriever = <span class="blank">____</span>
+
+# ...
+
+# TODO(④): 用管道符 | 串联出完整的 RAG 链。
+chain = <span class="blank">____</span></code></pre>
+      <p>提示：回忆 Lesson 5 的串联顺序：数据准备 -> 模板 -> 模型 -> 解析器。</p>
+    </li>
+    <li>
+      <p>运行程序：</p>
+      <pre><code>uv run python src/teach_ai/10_rag_lcel.py</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 自检：看输出对不对</div>
+    <p>判断标准：</p>
+    <ul>
+      <li><strong>测试 1</strong> 会给出关于编码规范的准确回答。</li>
+      <li><strong>测试 2 (域外问题)</strong> 会回答“文档中没有相关信息”或类似拒答。</li>
+    </ul>
+    <p>注意测试 2 的拒答原理：因为 <code>search_type="similarity_score_threshold"</code> 发挥了作用，返回了空列表。<code>format_docs</code> 把空列表变成了 <code>""</code> 传给 <code>prompt</code>。大模型看到了空的上下文，遵从了系统指令“文档中没有的信息请明确说明”。这就实现了你在 Week 1 里手写的拦截功能。</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识检验</h2>
+
+<div class="quiz" data-quiz-id="l6q1">
+  <p class="quiz-question">Q1: <code>RunnablePassthrough()</code> 在这条 RAG 链里的作用是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">跳过当前的步骤，直接执行下一步</button>
+    <button class="quiz-option" data-correct="true">作为占位管道，把一开始的查询字符串原封不动地传进字典，赋值给 "question" 键</button>
+    <button class="quiz-option">自动提取文档中的问题，跳过 retriever</button>
+    <button class="quiz-option">自动拦截低相似度的问题，不发送给大模型</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l6q2">
+  <p class="quiz-question">Q2: 在本课中，域外问题（李明的孩子）没有乱回答，原因是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">我们在代码里写了 if 语句，提前截断了网络请求，像 Week 1 那样没发给 LLM</button>
+    <button class="quiz-option" data-correct="true">retriever 过滤了低分片段导致 context 为空，大模型结合系统提示词做出了拒答</button>
+    <button class="quiz-option">大模型的参数里自带了这道题的答案，觉得问得不对就拒绝了</button>
+    <button class="quiz-option">Chroma 数据库内置了大语言模型，自己拒绝了查询</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<!-- ================================================================== -->
+<h2>卡住了？点开看完整答案</h2>
+
+<details class="reveal">
+  <summary>10_rag_lcel.py 两处空白的答案</summary>
+  <div class="reveal-body">
+    <p>下面是那两处空白的填法：</p>
+<pre><code># ② 配置 Retriever 和阈值
+retriever = vectorstore.as_retriever(
+    search_type="similarity_score_threshold",
+    search_kwargs={"score_threshold": 0.5, "k": 3}
+)
+
+# ④ 完整的链串联
+chain = setup_and_retrieval | prompt | llm | parser</code></pre>
+  </div>
+</details>
+
+<!-- ================================================================== -->
+<h2>Week 2 路线：下一站</h2>
+
+<p>你现在已经能用极少的代码，像拼积木一样拼出一条带有阈值门控的 RAG 链了！</p>
+<p>下一课，我们将替换掉最后一块手写逻辑：<code>split("\n\n")</code>。我们将引入 <strong>Document Loaders</strong> 和 <strong>RecursiveCharacterTextSplitter</strong>，让你能直接从真实的 Markdown、PDF 文件加载数据并智能切块。</p>
+
+<!-- ================================================================== -->
+<h2>参考文档</h2>
+
+<ul>
+  <li>📘 <a href="../reference/glossary.html#langchain">术语表：LangChain / LCEL / Runnable</a></li>
+  <li>📘 <a href="https://python.langchain.com/docs/how_to/vectorstore_retriever/" target="_blank">LangChain: How to use vector store as retriever</a></li>
+</ul>
+
+<nav class="lesson-nav">
+  <a href="0005-langchain-lcel.html">← Lesson 0005: Hello, LangChain</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · Mission: 从 Python 全栈到 AI 工程师 · 2026</p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+<script src="../assets/copy-code.js" defer></script>
+</body>
+</html>
