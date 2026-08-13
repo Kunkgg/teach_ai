@@ -33,7 +33,7 @@ TRUST_SCORE_DATA = {
 # TODO(①): 给这个函数加上 @tool 装饰器
 #   提示：from langchain_core.tools import tool（已在上面 import）
 #   加了 @tool 后，LangChain 会用 docstring 和类型注解自动生成 JSON Schema
-____                              # ← 填这里
+@tool
 def count_violations(component: str) -> int:
     """查询指定组件的编码规范违规数量。当用户询问某个组件有多少违规时使用此工具。"""
     return VIOLATION_DATA.get(component, 0)
@@ -42,6 +42,7 @@ def count_violations(component: str) -> int:
 def get_trust_score(component: str) -> float:
     """查询指定组件的可信分数（0-100）。当用户询问某个组件的可信度或信任分数时使用此工具。"""
     return TRUST_SCORE_DATA.get(component, 0.0)
+
 
 tools = [count_violations, get_trust_score]
 tools_by_name = {t.name: t for t in tools}
@@ -56,7 +57,7 @@ llm = ChatOpenAI(
 
 # TODO(②): 用 bind_tools 把工具列表绑定到 LLM
 #   提示：llm.bind_tools(____)
-llm_with_tools = ____             # ← 填这里
+llm_with_tools = llm.bind_tools(tools)
 
 # ── 3. 发送问题，观察 LLM 的工具调用决策 ──
 question = "组件 auth-service 有多少条编码规范违规？"
@@ -82,7 +83,7 @@ if ai_msg.tool_calls:
         #   c. 创建 ToolMessage(content=str(result), tool_call_id=tc["id"])
         selected_tool = tools_by_name[tc["name"]]
         result = selected_tool.invoke(tc)
-        tool_msg = ____               # ← 填这里
+        tool_msg = ToolMessage(content=str(result), tool_call_id=tc["id"])
         
         print(f"   结果: {result}")
         messages.append(tool_msg)
