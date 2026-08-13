@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0008 — 让 LLM 调用你的 Python 函数</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/quiz.css">
+  <link rel="stylesheet" href="../assets/task.css">
+  <link rel="stylesheet" href="../assets/reveal.css">
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Lesson 0008</span>
+  <h1>让 LLM 调用你的 Python 函数</h1>
+  <p class="lesson-subtitle">Tool Calling / Function Calling</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 25–35 分钟</span>
+    <span><span class="tag tag-langchain">动手课</span></span>
+    <span>📅 Week 2</span>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<h2>从 RAG 到 Agent 的跳板</h2>
+
+<p>经过 7 节课，RAG pipeline 六步已全部打通——LLM 能<strong>阅读你的文档</strong>了。但如果你想让它：</p>
+<ul>
+  <li>查询数据库里某个组件的实时违规数？</li>
+  <li>调用 API 触发一次可信构建扫描？</li>
+  <li>计算两个版本之间的可信分数变化？</li>
+</ul>
+<p>LLM 只会生成文本，它做不了这些事。<strong>Tool Calling</strong>（工具调用）解决的就是这个问题——让 LLM 能"调用"你写的 Python 函数。</p>
+
+<!-- ================================================================== -->
+<h2>知识 ①：核心心智模型 — LLM 不执行代码</h2>
+
+<p>Tool Calling 最容易搞混的一点：<strong>LLM 自己并不执行函数</strong>。它只做一件事——生成一段 JSON，告诉你"请调用这个函数，参数是这些"。</p>
+
+<div class="diagram">
+<pre>
+你的问题: "auth-service 有多少条违规？"
+    │
+    ▼  Step 1: 发给 LLM（附带工具清单）
+┌───────────────────────────────────────────┐
+│ LLM 思考：这个问题需要查数据，我手头有    │
+│ count_violations 工具，参数要 component    │
+│                                           │
+│ → 返回 JSON:                              │
+│   name: "count_violations"                │
+│   args: {"component": "auth-service"}     │
+│   id:   "call_abc123"                     │
+└───────────────────────────────────────────┘
+    │
+    ▼  Step 2: 你的代码执行函数
+    result = count_violations("auth-service")  → 12
+    │
+    ▼  Step 3: 把结果包装成 ToolMessage 发回 LLM
+    │
+    ▼  Step 4: LLM 用自然语言回答
+    "auth-service 目前有 12 条编码规范违规。"
+</pre>
+<p class="diagram-caption">图 1：Tool Calling 四步循环——LLM 只产出 JSON，你的代码负责执行</p>
+</div>
+
+<div class="callout callout-warning">
+  <div class="callout-title">⚠️ 面试高频考点</div>
+  <p>"LLM 真的执行了函数吗？" 答案：<strong>没有</strong>。LLM 只产出一段 JSON（函数名 + 参数），告诉你的代码该调用什么。执行是你的代码做的。这个区分是理解 Agent 架构的基础。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ②：@tool + bind_tools + tool_calls</h2>
+
+<p>在 LangChain 中，Tool Calling 有 4 个步骤：</p>
+
+<h3>Step 1：用 <code>@tool</code> 定义工具</h3>
+<pre><code>from langchain_core.tools import tool
+
+@tool
+def count_violations(component: str) -> int:
+    """查询指定组件的编码规范违规数量。"""
+    return db.query(component)  # 你的业务逻辑</code></pre>
+<p><code>@tool</code> 装饰器干了什么？它把函数的 <strong>docstring</strong>（描述）和 <strong>类型注解</strong>（参数类型）转换成一份 JSON Schema，LLM 靠这份 Schema 知道"有这个工具可用、它做什么、需要什么参数"。所以 <strong>docstring 写得好不好，直接影响 LLM 是否能正确选择工具</strong>。</p>
+
+<h3>Step 2：用 <code>bind_tools</code> 把工具交给模型</h3>
+<pre><code>llm_with_tools = llm.bind_tools([count_violations, get_trust_score])</code></pre>
+<p><code>bind_tools()</code> 返回一个新的 Runnable，每次调用时都会把工具的 JSON Schema 注入 API 请求。</p>
+
+<h3>Step 3：模型返回 <code>AIMessage.tool_calls</code></h3>
+<pre><code>ai_msg = llm_with_tools.invoke(messages)
+print(ai_msg.tool_calls)
+# [{"name": "count_violations", "args": {"component": "auth-service"}, "id": "call_abc123"}]</code></pre>
+<p><code>.tool_calls</code> 是一个列表——因为 LLM 可能一次请求调用多个工具（并行调用）。每个条目有三个字段：<code>name</code>（函数名）、<code>args</code>（参数字典）、<code>id</code>（唯一请求 ID）。</p>
+
+<h3>Step 4：执行工具，用 <code>ToolMessage</code> 返回结果</h3>
+<pre><code>result = selected_tool.invoke(tool_call)
+tool_msg = ToolMessage(content=str(result), tool_call_id=tool_call["id"])</code></pre>
+<p><code>tool_call_id</code> 必须和 <code>AIMessage</code> 里的 <code>id</code> 一一对应——API 协议要求这样。LLM 靠 ID 把执行结果对应回具体的调用请求。</p>
+
+<div class="callout callout-concept">
+  <div class="callout-title">💡 对照 Week 1</div>
+  <p>Week 1 如果你要根据用户问题调用不同函数，得写 <code>if "违规" in question: count_violations(...)</code> 这样的硬编码分支。Tool Calling 把"选哪个函数、提取什么参数"这件事交给了 LLM——它比 if/elif 灵活得多，因为它理解自然语言。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ③：对照表 — 手写分支 vs Tool Calling</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>手写（Week 1 风格）</th>
+      <th>Tool Calling（现代化）</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>if/elif</code> 判断用户意图</td>
+      <td>LLM 自动选择最合适的工具</td>
+    </tr>
+    <tr>
+      <td>正则表达式 / 手动解析参数</td>
+      <td>LLM 自动生成结构化 JSON 参数</td>
+    </tr>
+    <tr>
+      <td>硬编码分支，新增功能要改代码</td>
+      <td>动态工具清单，新增工具只需注册</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ================================================================== -->
+<h2>Task ①：填空 — 写 12_tool_calling.py</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">1</span>
+    动手：填三处空白，跑通 Tool Calling 四步循环
+  </div>
+  <p class="task-goal">目标：LLM 收到问题后选择正确的工具、你的代码执行工具、LLM 用结果生成自然语言回答。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>打开 <code>src/teach_ai/12_tool_calling.py</code>，填补三处空白：</p>
+<pre><code># TODO(①): 给 count_violations 加上装饰器
+<span class="blank">____</span>
+def count_violations(component: str) -> int:
+
+# TODO(②): 用 bind_tools 把工具列表绑定到 LLM
+llm_with_tools = <span class="blank">____</span>
+
+# TODO(③): 创建 ToolMessage 把执行结果返回给 LLM
+tool_msg = <span class="blank">____</span></code></pre>
+      <p>提示：</p>
+      <ul>
+        <li>① 只需一个词——回忆上面 Step 1 的代码</li>
+        <li>② <code>llm</code> 对象已存在，<code>tools</code> 列表已定义</li>
+        <li>③ 需要两个参数：<code>content</code>（字符串化的结果）和 <code>tool_call_id</code>（从 <code>tc</code> 字典取）</li>
+      </ul>
+    </li>
+    <li>
+      <p>运行程序：</p>
+      <pre><code>uv run python src/teach_ai/12_tool_calling.py</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 自检</div>
+    <ul>
+      <li>输出 <code>🤖 LLM 返回的 tool_calls:</code> 后面能看到 <code>count_violations</code> 和参数 <code>auth-service</code></li>
+      <li>输出 <code>🔧 执行工具: count_violations({'component': 'auth-service'})</code></li>
+      <li>输出 <code>结果: 12</code></li>
+      <li>最终 LLM 用自然语言回答了"12 条违规"相关内容</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<h2>Task ②：改造 — 多工具场景</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">2</span>
+    改造：换个问题，观察 LLM 选了哪个工具
+  </div>
+  <p class="task-goal">目标：感受 LLM 自动选择工具的能力。</p>
+  <ol class="task-steps">
+    <li>
+      <p>把 <code>question</code> 变量改成：</p>
+      <pre><code>question = "auth-service 的可信分数是多少？"</code></pre>
+      <p>再跑一次，观察 <code>tool_calls</code> 里的 <code>name</code> 变了没有。</p>
+    </li>
+    <li>
+      <p>再试一个不需要工具的问题：</p>
+      <pre><code>question = "你好，今天天气怎么样？"</code></pre>
+      <p>观察 <code>tool_calls</code> 是否为空——LLM 判断不需要工具时，会直接回答。</p>
+    </li>
+  </ol>
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">💭 思考点</div>
+    <p>LLM 是怎么知道该选 <code>get_trust_score</code> 还是 <code>count_violations</code> 的？答案就在 <strong>docstring</strong> 里——"可信分数"匹配了 <code>get_trust_score</code> 的描述"查询指定组件的可信分数"。所以好的 docstring 是 Tool Calling 成功的关键。</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识检验</h2>
+
+<div class="quiz" data-quiz-id="l8q1">
+  <p class="quiz-question">Q1: LLM 在 Tool Calling 中的角色是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">在安全沙箱中执行 Python 函数并返回结果给客户端</button>
+    <button class="quiz-option" data-correct="true">生成包含函数名和参数的结构化请求，由应用代码负责执行</button>
+    <button class="quiz-option">自动导入并运行 Python 模块中的指定函数获取数据</button>
+    <button class="quiz-option">将 Python 源代码编译为 WebAssembly 在浏览器中执行</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l8q2">
+  <p class="quiz-question">Q2: <code>@tool</code> 装饰器最重要的作用是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option" data-correct="true">将函数的 docstring 和类型注解转换为 JSON Schema，让 LLM 知道工具的功能和参数</button>
+    <button class="quiz-option">自动为函数添加异常捕获和重试逻辑，保证网络调用的稳定可靠性</button>
+    <button class="quiz-option">在执行工具函数之前弹出授权确认，防止未经允许的危险操作执行</button>
+    <button class="quiz-option">拦截函数的返回值并自动序列化为字符串，统一所有工具的输出格式</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l8q3">
+  <p class="quiz-question">Q3: <code>ToolMessage</code> 的 <code>tool_call_id</code> 为什么必须和 <code>AIMessage</code> 中的 <code>id</code> 对应？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">仅仅是 LangChain 框架内部的日志记录需要，对 API 调用无影响</button>
+    <button class="quiz-option">如果不匹配，Python 解释器在运行工具函数时会抛出 KeyError 异常</button>
+    <button class="quiz-option" data-correct="true">API 协议要求 id 严格匹配，LLM 靠 id 把执行结果对应回具体的工具调用请求</button>
+    <button class="quiz-option">匹配 id 是为了计算每次工具调用的耗时，方便后续的性能优化分析</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<!-- ================================================================== -->
+<h2>卡住了？点开看完整答案</h2>
+
+<details class="reveal">
+  <summary>12_tool_calling.py 三处空白的答案</summary>
+  <div class="reveal-body">
+<pre><code># ① 只需一个装饰器
+@tool
+def count_violations(component: str) -> int:
+
+# ② bind_tools 接收工具列表
+llm_with_tools = llm.bind_tools(tools)
+
+# ③ 构造 ToolMessage，content 必须是字符串，tool_call_id 必须匹配
+tool_msg = ToolMessage(content=str(result), tool_call_id=tc["id"])</code></pre>
+    <p><strong>为什么 <code>content</code> 要用 <code>str(result)</code>？</strong> 因为 <code>ToolMessage.content</code> 必须是字符串（它会被发送给 LLM 作为文本输入），而 <code>count_violations</code> 返回的是 <code>int</code>。</p>
+    <p><strong>为什么 <code>tool_call_id</code> 要取 <code>tc["id"]</code>？</strong> 因为 API 要求每个 <code>ToolMessage</code> 的 ID 和它响应的那个 <code>tool_call</code> 的 ID 一一对应。如果 LLM 一次请求了两个工具调用，它需要靠 ID 区分哪个结果属于哪个请求。</p>
+  </div>
+</details>
+
+<!-- ================================================================== -->
+<h2>连接 Agent：while 循环 = Agent</h2>
+
+<p>如果你把刚才的 4 步（调用模型 → 检查 tool_calls → 执行工具 → 返回结果）放进一个 <code>while</code> 循环，直到 LLM 不再返回 <code>tool_calls</code> 为止……</p>
+
+<pre><code>while True:
+    ai_msg = llm_with_tools.invoke(messages)
+    if not ai_msg.tool_calls:
+        break           # LLM 认为不需要更多工具了，循环结束
+    # 执行工具、构造 ToolMessage、append 到 messages...
+
+print(ai_msg.content)   # 最终的自然语言回答</code></pre>
+
+<p>恭喜——你已经有了一个 <strong>Agent 的雏形</strong>。Week 3 的 <strong>LangGraph</strong> 会用<strong>状态图（StateGraph）</strong>来管理这个循环——加上状态管理、条件分支、错误处理和人工介入，让它变成一个<strong>生产级 Agent</strong>。</p>
+
+<!-- ================================================================== -->
+<h2>推荐阅读</h2>
+
+<p>📖 <strong>Primary Source</strong>: <a href="https://python.langchain.com/docs/how_to/tool_calling/" target="_blank">LangChain — How to use tool calling</a></p>
+<p>官方教程，覆盖 @tool、bind_tools、tool_calls 的完整用法。10 分钟可读完。</p>
+
+<!-- ================================================================== -->
+<h2>下一步预告</h2>
+
+<p><strong>LangGraph</strong>——用状态图管理 Tool Calling 循环，构建真正的有状态 Agent。从"写 while 循环"升级到"画一张图"，让 Agent 的流程可视化、可调试、可中断。</p>
+
+<p>💬 有任何不清楚的地方？直接问我，我是你的 AI 工程导师！</p>
+
+<!-- ================================================================== -->
+
+<nav class="lesson-nav">
+  <a href="0007-doc-loader-splitter.html">← Lesson 0007: Document Loaders + Splitter</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · Mission: 从 Python 全栈到 AI 工程师 · 2026</p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+<script src="../assets/copy-code.js" defer></script>
+</body>
+</html>

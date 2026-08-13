@@ -120,6 +120,42 @@
 
 ---
 
+## Tier 1.5: 文档解析引擎（生产级 RAG 核心）
+
+### Docling (IBM)
+
+- **Docling** ✅ 已验证
+  - URL: https://github.com/DS4SD/docling
+  - GitHub Stars: ~37K+（2026 年中）
+  - 备注: IBM 开源的 AI 文档解析引擎。基于 DocLayNet 布局检测 + TableFormer 表格提取。PDF/DOCX/PPTX → 结构化 Markdown/JSON。有 LangChain 集成包 `langchain-docling`
+  - 适用: 生产级文档解析，复杂 PDF（表格、多栏）
+
+### MinerU / Magic-PDF (OpenDataLab)
+
+- **MinerU** ✅ 已验证
+  - URL: https://github.com/opendatalab/MinerU
+  - GitHub Stars: ~76K+（2026 年中）
+  - 备注: 上海 AI Lab 开源。**中文 PDF 解析最强**。公式→LaTeX、表格识别、多栏检测。`pip install magic-pdf`
+  - 适用: 中文文档、学术论文、技术规范
+
+### Marker (VikParuchuri)
+
+- **Marker** 🔍 待审查
+  - URL: https://github.com/VikParuchuri/marker
+  - GitHub Stars: ~38K+
+  - 备注: 深度学习 PDF→Markdown 转换。速度快（GPU）、多语言。`pip install marker-pdf`
+  - 适用: 批量 PDF→Markdown 转换
+
+### Unstructured.io
+
+- **Unstructured** 🔍 待审查
+  - URL: https://github.com/Unstructured-IO/unstructured
+  - GitHub Stars: ~15K+
+  - 备注: 支持 60+ 文档格式。开源库 + SaaS API。依赖链长，安装复杂
+  - 适用: 多格式混合文档摄入
+
+---
+
 ## 待添加
 
 随着学习推进，持续补充优质资源。

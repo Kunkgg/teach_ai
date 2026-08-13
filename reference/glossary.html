@@ -291,9 +291,30 @@
   <span class="glossary-term-en">Tool Calling / Function Calling</span>
   <span class="glossary-term-zh">工具调用</span>
   <div class="glossary-def">
-    <p>让 LLM 决定是否需要调用外部工具（函数），并生成调用所需的参数。LLM 不直接执行工具 — 它只生成调用请求，由应用层执行。这是 Agent 的基础能力。</p>
+    <p>让 LLM 决定是否需要调用外部工具（函数），并生成调用所需的参数。<strong>核心心智模型：LLM 不执行任何代码</strong>——它只产出一段 JSON（函数名 + 参数），由应用层代码负责实际执行。这是 Agent 的基础能力。</p>
+    <p><strong>四步循环：</strong>① 用 <code>@tool</code> 定义工具 → ② 用 <code>bind_tools()</code> 把工具清单交给模型 → ③ 模型返回 <code>AIMessage.tool_calls</code>（name/args/id） → ④ 你的代码执行工具，用 <code>ToolMessage</code> 把结果返回 LLM。这个循环跑到 LLM 不再返回 tool_calls 为止，就是一个 Agent。</p>
   </div>
-  <p class="glossary-related">相关: <a href="#agent">Agent</a>, <a href="#react">ReAct</a></p>
+  <p class="glossary-related">首见: <a href="../lessons/0008-tool-calling.html">Lesson 0008</a> · 相关: <a href="#tool-decorator">@tool</a>, <a href="#tool-message">ToolMessage</a>, <a href="#agent">Agent</a>, <a href="#react">ReAct</a></p>
+</div>
+
+<div class="glossary-entry" id="tool-decorator">
+  <span class="glossary-term">@tool</span>
+  <span class="glossary-term-en">@tool Decorator</span>
+  <span class="glossary-term-zh">工具装饰器</span>
+  <div class="glossary-def">
+    <p>LangChain 中将普通 Python 函数注册为工具的装饰器（<code>from langchain_core.tools import tool</code>）。它把函数的 <strong>docstring</strong>（描述）和<strong>类型注解</strong>（参数类型）转换为 JSON Schema。LLM 靠这份 Schema 决定什么时候用这个工具、需要传什么参数。<strong>docstring 写得好不好，直接影响 LLM 的工具选择准确率</strong>。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0008-tool-calling.html">Lesson 0008</a> · 相关: <a href="#tool-calling">Tool Calling</a>, <a href="#runnable">Runnable</a></p>
+</div>
+
+<div class="glossary-entry" id="tool-message">
+  <span class="glossary-term">ToolMessage</span>
+  <span class="glossary-term-en">ToolMessage</span>
+  <span class="glossary-term-zh">工具消息</span>
+  <div class="glossary-def">
+    <p>Tool Calling 四步循环中的第 4 步：把工具执行结果包装成 <code>ToolMessage(content=str(result), tool_call_id=tc["id"])</code> 发回给 LLM。<code>tool_call_id</code> 必须和 <code>AIMessage.tool_calls</code> 中的 <code>id</code> 严格一一对应——API 协议要求，LLM 靠 ID 把结果对应回具体的调用请求。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0008-tool-calling.html">Lesson 0008</a> · 相关: <a href="#tool-calling">Tool Calling</a>, <a href="#messages-array">Messages 数组</a></p>
 </div>
 
 <!-- ================================================================== -->
@@ -326,7 +347,7 @@
   <div class="glossary-def">
     <p>在 Agent 的工作流中设置检查点，暂停执行，等待人工审核或确认后再继续。用于关键决策步骤，确保 AI 不会自主执行高风险操作。</p>
   </div>
-  <p class="glossary-related">相关: <a href="#agent">Agent</a>, <a href="#langgraph">LangGraph</a></p>
+  <p class="glossary-related">相关: <a href="#agent">Agent</a>, <a href="#langgraph">LangGraph</a>, <a href="#tool-calling">Tool Calling</a></p>
 </div>
 
 <!-- ================================================================== -->

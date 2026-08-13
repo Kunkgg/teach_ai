@@ -34,4 +34,9 @@ LangChain 的 `Document` 对象封装了文本和元数据。`TextLoader` 自动
 - `MarkdownHeaderTextSplitter`（按标题层级切分并自动提取标题到 metadata）值得在进阶课程中介绍，但本课先用 RCTS 建立基础认知。
 
 ## Status
-Active — Week 2 RAG 基础收官。相关：[[0007-lcel-rag-migration]]、[[0003-vector-db-and-chunking]]
+Completed — 用户已验证通过（5 chunks, ≤200 字符）。用户主动将 separators 中的 `"。"` 替换为 `","` 并去掉了 `" "`，说明在改造任务中独立思考了中文分隔符选择。
+
+**用户反思（2026-08-12）**：「RAG 实际效果的很大一部分由数据的解析和 chunk 切分影响。面试的时候可能也会重点问这部分如何处理真实环境的数据。」这个判断非常准确——生产级 RAG 中，文档解析（PDF 表格/多栏/公式）和切分策略（语义切分 vs 固定长度、chunk_size 调优、metadata 丰富度）是决定检索质量的关键环节，也是面试高频考点。RESOURCES.md 已收录 Docling/MinerU/Marker 等生产级解析引擎，可在进阶课程中展开。
+
+相关：[[0007-lcel-rag-migration]]、[[0003-vector-db-and-chunking]]
+
