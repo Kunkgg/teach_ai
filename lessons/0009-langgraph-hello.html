@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0009 — 从 while 循环到状态图</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/quiz.css">
+  <link rel="stylesheet" href="../assets/task.css">
+  <link rel="stylesheet" href="../assets/reveal.css">
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Lesson 0009</span>
+  <h1>从 while 循环到状态图</h1>
+  <p class="lesson-subtitle">Hello, LangGraph — Week 3 开篇</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 25–35 分钟</span>
+    <span><span class="tag tag-langchain">动手课</span></span>
+    <span>📅 Week 3</span>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<h2>回顾：Lesson 8 的 Tool Calling 循环</h2>
+
+<p>Lesson 8 你写出了这个流程：</p>
+
+<div class="diagram">
+<pre>
+messages = [HumanMessage(...)]
+    │
+    ▼
+ai_msg = llm_with_tools.invoke(messages)
+    │
+    ├── 有 tool_calls → 执行工具 → ToolMessage → append → 再调 LLM
+    │
+    └── 无 tool_calls → 结束，输出 ai_msg.content
+</pre>
+<p class="diagram-caption">图 1：Lesson 8 手写 Tool Calling 流程</p>
+</div>
+
+<p>这段代码<strong>能跑</strong>，但如果你要把它用在生产环境，三个问题会冒出来：</p>
+<ol>
+  <li><strong>状态管理</strong>：<code>messages</code> 列表需要你手动 <code>append</code>，多轮对话时容易漏或错</li>
+  <li><strong>可视化</strong>：<code>while True</code> + <code>if/else</code> 嵌套深了，流程只存在你脑子里</li>
+  <li><strong>人工介入</strong>：执行敏感操作前想让人确认？手写循环里很难做</li>
+</ol>
+
+<p><strong>LangGraph</strong> 用<strong>状态图（StateGraph）</strong>解决这三个问题——把 <code>while</code> 循环变成一张可视化的图。</p>
+
+<!-- ================================================================== -->
+<h2>知识 ①：核心心智模型 — Graph = 升级版 while 循环</h2>
+
+<p>Lesson 8 的 <code>while True</code> 循环，用 LangGraph 画出来就是这张图：</p>
+
+<div class="diagram">
+<pre>
+     ┌─────────┐
+     │  START  │
+     └────┬────┘
+          ▼
+   ┌─────────────┐
+   │   chatbot    │ ←─────────────────────────┐
+   │ （调用 LLM） │                            │
+   └──────┬──────┘                            │
+          │                                   │
+     有 tool_calls?                           │
+     ╱          ╲                             │
+   Yes          No                            │
+    │            │                            │
+    ▼            ▼                            │
+┌────────┐  ┌────────┐                       │
+│ tools  │  │  END   │                       │
+│(执行)  │  └────────┘                       │
+└───┬────┘                                   │
+    └─────────────────────────────────────────┘
+</pre>
+<p class="diagram-caption">图 2：LangGraph StateGraph —— 和 Lesson 8 完全对应</p>
+</div>
+
+<p>对照表——Lesson 8 的每行代码，都能在 LangGraph 里找到对应：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Lesson 8 手写</th>
+      <th>LangGraph</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>while True:</code></td>
+      <td>Graph 自动循环（<code>tools → chatbot</code> 回边）</td>
+    </tr>
+    <tr>
+      <td><code>if not tool_calls: break</code></td>
+      <td><code>tools_condition</code> → 路由到 <code>END</code></td>
+    </tr>
+    <tr>
+      <td><code>for tc in tool_calls: execute...</code></td>
+      <td><code>ToolNode(tools)</code> 自动执行</td>
+    </tr>
+    <tr>
+      <td><code>messages.append(...)</code> 手动追加</td>
+      <td><code>add_messages</code> reducer 自动管理</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-concept">
+  <div class="callout-title">💡 一句话总结</div>
+  <p>LangGraph 没做新的事——它只是把你已经理解的 Tool Calling 循环，放进了一个<strong>结构化的画布</strong>里。State 就是你手动维护的 <code>messages</code> 列表。Node 就是你的函数。Edge 就是你的 <code>if/else</code> 分支。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识 ②：四个新概念</h2>
+
+<h3>1. State — 图的共享记忆</h3>
+<pre><code>from typing import Annotated, TypedDict
+from langgraph.graph.message import add_messages
+
+class State(TypedDict):
+    messages: Annotated[list, add_messages]</code></pre>
+<p><code>State</code> 是一个 <code>TypedDict</code>，定义了图里所有节点共享的数据。<code>messages</code> 是最核心的字段——对话历史。</p>
+
+<h3>2. Node — 做事的函数</h3>
+<pre><code>def chatbot(state: State):
+    return {"messages": [llm_with_tools.invoke(state["messages"])]}</code></pre>
+<p>每个 Node 是一个 Python 函数，接收当前 <code>state</code>，返回一个<strong>部分更新</strong>（只返回要更新的 key）。</p>
+
+<h3>3. Edge — 连接节点</h3>
+<pre><code># 固定路径：START → chatbot
+graph_builder.add_edge(START, "chatbot")
+
+# 条件路径：chatbot → tools 或 END
+graph_builder.add_conditional_edges("chatbot", tools_condition)</code></pre>
+<ul>
+  <li><strong>Normal edge</strong>：固定走向，如 <code>tools → chatbot</code></li>
+  <li><strong>Conditional edge</strong>：动态路由，根据 state 决定走向</li>
+</ul>
+
+<h3>4. Compile — 编译成可执行图</h3>
+<pre><code>graph = graph_builder.compile()</code></pre>
+<p>编译后得到 <code>CompiledGraph</code>，可以 <code>.invoke()</code> 或 <code>.stream()</code>。</p>
+
+<!-- ================================================================== -->
+<h2>知识 ③：add_messages — 为什么需要 Reducer</h2>
+
+<p>这是 LangGraph <strong>最容易踩的坑</strong>：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>写法</th>
+      <th>Node 返回 <code>{"messages": [new_msg]}</code> 的效果</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>messages: list</code>（无 reducer）</td>
+      <td><strong>覆盖</strong>整个列表 → 对话历史丢失！</td>
+    </tr>
+    <tr>
+      <td><code>messages: Annotated[list, add_messages]</code></td>
+      <td><strong>追加</strong>到已有列表 → 历史完整保留 ✅</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout callout-warning">
+  <div class="callout-title">⚠️ 面试高频考点</div>
+  <p>「LangGraph 的 State 里 <code>Annotated[list, add_messages]</code> 有什么作用？」答：<code>add_messages</code> 是一个 <strong>reducer 函数</strong>，它让每个 node 返回的消息<strong>追加</strong>到已有列表，而不是覆盖。没有它，每个 node 执行后之前的对话历史会丢失。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>Task ①：填空 — 写 14_langgraph_hello.py</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">1</span>
+    动手：填三处空白，用 LangGraph 跑通 Tool Calling
+  </div>
+  <p class="task-goal">目标：和 Lesson 8 相同的结果（LLM 选工具 → 执行 → 自然语言回答），但用 StateGraph 管理流程。</p>
+
+  <ol class="task-steps">
+    <li>
+      <p>打开 <code>src/teach_ai/14_langgraph_hello.py</code>，填补三处空白：</p>
+<pre><code># TODO(①): 定义 State 的 messages 字段（用 Annotated + add_messages）
+class State(TypedDict):
+    messages: <span class="blank">____</span>
+
+# TODO(②): 添加条件边（chatbot 之后根据 tool_calls 决定走向）
+<span class="blank">____</span>
+
+# TODO(③): 调用 graph（传入正确格式的输入字典）
+result = <span class="blank">____</span></code></pre>
+      <p>提示：</p>
+      <ul>
+        <li>① 回忆上面知识 ③ —— 两个关键词：<code>Annotated</code> 和 <code>add_messages</code></li>
+        <li>② 方法名 <code>add_conditional_edges</code>，两个参数：源节点名 + 路由函数</li>
+        <li>③ <code>graph.invoke()</code> 接收字典，key 是 State 的字段名 <code>"messages"</code>，值是消息列表</li>
+      </ul>
+    </li>
+    <li>
+      <p>运行程序：</p>
+      <pre><code>uv run python src/teach_ai/14_langgraph_hello.py</code></pre>
+    </li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">✅ 自检</div>
+    <ul>
+      <li>看到 <code>🤖 [AIMessage] tool_calls:</code> 包含 <code>count_violations</code> 和参数 <code>auth-service</code></li>
+      <li>看到 <code>🤖 [ToolMessage]:</code> 包含结果 <code>12</code></li>
+      <li>最终 <code>🤖 [AIMessage]:</code> 用自然语言回答了"12 条违规"</li>
+      <li>末尾打印了 Mermaid 格式的图描述</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<h2>Task ②：改造 — 可视化你的 Agent</h2>
+
+<div class="task">
+  <div class="task-header">
+    <span class="task-number">2</span>
+    改造：把 Mermaid 描述粘贴到在线编辑器看效果
+  </div>
+  <p class="task-goal">目标：亲眼看到你的 Agent 流程图。</p>
+
+  <ol class="task-steps">
+    <li>复制程序末尾打印的 Mermaid 代码（以 <code>%%{init:</code> 开头）</li>
+    <li>打开 <a href="https://mermaid.live/" target="_blank">mermaid.live</a></li>
+    <li>粘贴代码，左侧编辑、右侧实时预览</li>
+    <li>观察：<code>__start__</code> → <code>chatbot</code> → <code>tools</code> 的循环结构</li>
+  </ol>
+
+  <div class="task-checkpoint">
+    <div class="task-checkpoint-title">💭 思考点</div>
+    <p>这张图和上面知识 ① 的手画 ASCII 图是不是一模一样？LangGraph 的 <code>get_graph().draw_mermaid()</code> 让你的 Agent 流程<strong>可视化</strong>——这是手写 <code>while</code> 做不到的。在生产环境中，能看到 Agent 的执行路径对调试至关重要。</p>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识检验</h2>
+
+<div class="quiz" data-quiz-id="l9q1">
+  <p class="quiz-question">Q1: State 中 <code>Annotated[list, add_messages]</code> 的 <code>add_messages</code> 做了什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option" data-correct="true">将新消息追加到已有列表，而不是覆盖，确保对话历史完整保留</button>
+    <button class="quiz-option">将消息列表序列化为字符串，以便通过网络传输到远程执行节点</button>
+    <button class="quiz-option">自动过滤列表中的重复消息，保证消息内容不会出现相同项</button>
+    <button class="quiz-option">在每条消息前添加时间戳标记，用于后续的性能分析和审计</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l9q2">
+  <p class="quiz-question">Q2: <code>tools_condition</code> 在什么情况下会路由到 <code>END</code>？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">当工具执行过程中抛出异常导致流程无法继续时</button>
+    <button class="quiz-option" data-correct="true">当最后一条消息是 AIMessage 且不包含 tool_calls 时</button>
+    <button class="quiz-option">当 State 的消息列表长度超过预设上限需要截断时</button>
+    <button class="quiz-option">当所有已注册工具都被调用过至少一次之后自动结束</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l9q3">
+  <p class="quiz-question">Q3: 相比手写 <code>while</code> 循环，StateGraph 最关键的优势是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">自动选择最优模型并动态切换不同的语言模型供应商</button>
+    <button class="quiz-option">将所有工具函数编译为高性能本地代码以加速运行</button>
+    <button class="quiz-option" data-correct="true">支持状态持久化、可视化调试、人工中断和条件路由等特性</button>
+    <button class="quiz-option">自动将单机应用部署到分布式集群以支持高并发请求</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<!-- ================================================================== -->
+<h2>卡住了？点开看完整答案</h2>
+
+<details class="reveal">
+  <summary>14_langgraph_hello.py 三处空白的答案</summary>
+  <div class="reveal-body">
+<pre><code># ① State 的 messages 字段：用 Annotated + add_messages
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+
+# ② 添加条件边：chatbot 之后根据 tool_calls 决定走向
+graph_builder.add_conditional_edges("chatbot", tools_condition)
+
+# ③ 调用 graph：传入 state 格式的字典
+result = graph.invoke({"messages": [HumanMessage(content=question)]})</code></pre>
+    <p><strong>① 为什么用 <code>Annotated[list, add_messages]</code>？</strong> <code>add_messages</code> 是 reducer 函数，让每个 node 返回的 <code>{"messages": [new_msg]}</code> 追加到已有列表，而不是覆盖。没有它，每次 node 执行后之前的对话历史就丢了。</p>
+    <p><strong>② 为什么用 <code>tools_condition</code> 而不是手写路由函数？</strong> <code>tools_condition</code> 是 LangGraph 预置的路由函数，它检查最后一条 <code>AIMessage</code> 是否有 <code>tool_calls</code>——有就返回 <code>"tools"</code>，没有就返回 <code>END</code>。和 Lesson 8 的 <code>if not ai_msg.tool_calls: break</code> 完全对应。</p>
+    <p><strong>③ 为什么输入是 <code>{"messages": [...]}</code>？</strong> <code>graph.invoke()</code> 接收的输入格式必须和 <code>State</code> 的结构匹配。<code>State</code> 有一个 <code>messages</code> 字段，所以输入字典的 key 也是 <code>"messages"</code>。</p>
+  </div>
+</details>
+
+<!-- ================================================================== -->
+<h2>延伸：create_react_agent — 一行搞定</h2>
+
+<p>LangGraph 提供了一个快捷函数 <code>create_react_agent</code>，它把上面的 State 定义 + Node 定义 + Edge 连接 + 编译全部封装成一行：</p>
+
+<pre><code>from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(llm, tools)
+result = agent.invoke({"messages": [HumanMessage(content=question)]})</code></pre>
+
+<p>但你要<strong>先理解手动搭建的过程</strong>——面试一定会问「<code>create_react_agent</code> 内部做了什么？」你现在能答：它创建了一个 <code>StateGraph</code>，定义了 <code>chatbot</code> 和 <code>tools</code> 两个 node，用 <code>tools_condition</code> 做条件路由，用 <code>add_messages</code> 管理状态。</p>
+
+<!-- ================================================================== -->
+<h2>推荐阅读</h2>
+
+<p>📖 <strong>Primary Source</strong>: <a href="https://langchain-ai.github.io/langgraph/tutorials/introduction/" target="_blank">LangGraph — Introduction Tutorial</a></p>
+<p>官方手把手教程，从零搭建一个带工具的聊天机器人。本课的知识全部来自这里。</p>
+
+<!-- ================================================================== -->
+<h2>下一步预告</h2>
+
+<p><strong>记忆（Memory）</strong>——目前的 Agent 每次调用都是"失忆"的。下一课加入 <code>MemorySaver</code> + <code>thread_id</code>，让 Agent 记住多轮对话，变成一个有状态的可信看板助手。</p>
+
+<p>💬 有任何不清楚的地方？直接问我，我是你的 AI 工程导师！</p>
+
+<!-- ================================================================== -->
+
+<nav class="lesson-nav">
+  <a href="0008-tool-calling.html">← Lesson 0008: Tool Calling</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · Mission: 从 Python 全栈到 AI 工程师 · 2026</p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+<script src="../assets/copy-code.js" defer></script>
+</body>
+</html>

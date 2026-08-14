@@ -24,4 +24,4 @@ RAG pipeline 六步全部完成 LangChain 迁移后，进入 Week 2 后半核心
 下一步引入 LangGraph。LangGraph 将接管这个过程，用状态图来更安全可靠地管理这个带有 `while` 行为的循环，从而构建一个健壮的有状态 Agent。
 
 **Status**: 
-Created — 等待用户验证
+Verified — 用户已完成 Lesson 0008

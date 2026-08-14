@@ -392,9 +392,100 @@
 
 <!-- ================================================================== -->
 
+<div class="glossary-entry" id="langgraph">
+  <span class="glossary-term">LangGraph</span>
+  <div class="glossary-def">
+    <p>LangChain 生态中用于构建<strong>有状态 AI Agent</strong>的框架。核心思想：用<strong>状态图（StateGraph）</strong>替代手写 <code>while</code> 循环来管理 Tool Calling 的迭代过程。提供状态持久化（Checkpointing）、可视化调试、条件路由、人工中断（Human-in-the-loop）等生产级特性。</p>
+    <p><code>from langgraph.graph import StateGraph, START, END</code></p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#stategraph">StateGraph</a>, <a href="#tool-calling">Tool Calling</a>, <a href="#agent">Agent</a></p>
+</div>
+
+<div class="glossary-entry" id="stategraph">
+  <span class="glossary-term">StateGraph</span>
+  <span class="glossary-term-zh">状态图</span>
+  <div class="glossary-def">
+    <p>LangGraph 的核心类。用 <code>StateGraph(State)</code> 创建图实例，通过 <code>add_node()</code>、<code>add_edge()</code>、<code>add_conditional_edges()</code> 定义图的结构，最后 <code>compile()</code> 编译成可执行的 <code>CompiledGraph</code>。</p>
+    <p>一个最小的 Tool Calling Agent 图包含两个 node（<code>chatbot</code> + <code>tools</code>）和一条条件边（<code>tools_condition</code>）。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#langgraph">LangGraph</a>, <a href="#node">Node</a>, <a href="#edge">Edge</a></p>
+</div>
+
+<div class="glossary-entry" id="state-langgraph">
+  <span class="glossary-term">State</span>
+  <span class="glossary-term-en">(LangGraph)</span>
+  <span class="glossary-term-zh">状态</span>
+  <div class="glossary-def">
+    <p>图中所有节点共享的数据结构，通常用 <code>TypedDict</code> 定义。最常见的 key 是 <code>messages</code>（对话历史）。State 的每个字段可以指定 <strong>reducer</strong>（如 <code>add_messages</code>），控制 node 返回的更新是追加还是覆盖。</p>
+    <pre><code>class State(TypedDict):
+    messages: Annotated[list, add_messages]</code></pre>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#add-messages">add_messages</a>, <a href="#reducer">Reducer</a></p>
+</div>
+
+<div class="glossary-entry" id="add-messages">
+  <span class="glossary-term">add_messages</span>
+  <span class="glossary-term-zh">消息追加器（Reducer）</span>
+  <div class="glossary-def">
+    <p>LangGraph 预置的 reducer 函数。用 <code>Annotated[list, add_messages]</code> 修饰 State 的 <code>messages</code> 字段后，每个 node 返回的 <code>{"messages": [new_msg]}</code> 会<strong>追加</strong>到已有列表，而非覆盖。没有它，每次 node 执行后对话历史会丢失。<strong>LangGraph 最常见的初学者错误就是忘记这个 reducer。</strong></p>
+    <p><code>from langgraph.graph.message import add_messages</code></p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#state-langgraph">State</a>, <a href="#reducer">Reducer</a></p>
+</div>
+
+<div class="glossary-entry" id="reducer">
+  <span class="glossary-term">Reducer</span>
+  <span class="glossary-term-zh">归约函数</span>
+  <div class="glossary-def">
+    <p>在 LangGraph State 中，reducer 定义了当多个 node 更新同一个 state key 时如何合并。默认行为是<strong>覆盖</strong>（最后一个写入的值生效）。通过 <code>Annotated[type, reducer_fn]</code> 可以自定义合并逻辑，如 <code>add_messages</code>（追加消息）或 <code>operator.add</code>（列表拼接）。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#add-messages">add_messages</a>, <a href="#state-langgraph">State</a></p>
+</div>
+
+<div class="glossary-entry" id="node">
+  <span class="glossary-term">Node</span>
+  <span class="glossary-term-en">(LangGraph)</span>
+  <span class="glossary-term-zh">节点</span>
+  <div class="glossary-def">
+    <p>状态图中"做事"的单元。每个 Node 是一个 Python 函数（或 callable），接收当前 <code>state</code>，返回一个 <strong>partial state update</strong>（只包含要更新的 key）。LangGraph 预置了 <code>ToolNode</code> 来自动执行 tool calls。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#stategraph">StateGraph</a>, <a href="#toolnode">ToolNode</a></p>
+</div>
+
+<div class="glossary-entry" id="edge">
+  <span class="glossary-term">Edge / Conditional Edge</span>
+  <span class="glossary-term-zh">边 / 条件边</span>
+  <div class="glossary-def">
+    <p>连接 Node 的路径。<strong>Normal edge</strong>（<code>add_edge</code>）是固定路径，A 做完一定到 B。<strong>Conditional edge</strong>（<code>add_conditional_edges</code>）根据路由函数的返回值动态决定下一个 node。</p>
+    <p>LangGraph 预置的 <code>tools_condition</code> 是最常用的条件路由：有 <code>tool_calls</code> → <code>"tools"</code>，没有 → <code>END</code>。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#stategraph">StateGraph</a>, <a href="#tools-condition">tools_condition</a></p>
+</div>
+
+<div class="glossary-entry" id="toolnode">
+  <span class="glossary-term">ToolNode</span>
+  <div class="glossary-def">
+    <p>LangGraph 预置的 Node，自动执行 tool calls。它读取最后一条 <code>AIMessage</code> 的 <code>tool_calls</code>，逐个执行对应工具，将结果包装成 <code>ToolMessage</code> 返回。替代了 Lesson 8 手动编写的 <code>for tc in tool_calls: ...</code> 循环。</p>
+    <p><code>from langgraph.prebuilt import ToolNode</code></p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#tool-calling">Tool Calling</a>, <a href="#node">Node</a></p>
+</div>
+
+<div class="glossary-entry" id="tools-condition">
+  <span class="glossary-term">tools_condition</span>
+  <div class="glossary-def">
+    <p>LangGraph 预置的条件路由函数。检查 State 中最后一条 <code>AIMessage</code> 是否包含 <code>tool_calls</code>：有则返回 <code>"tools"</code>（路由到工具节点），无则返回 <code>END</code>（结束图）。替代了 Lesson 8 的 <code>if not ai_msg.tool_calls: break</code>。</p>
+    <p><code>from langgraph.prebuilt import tools_condition</code></p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#edge">Conditional Edge</a>, <a href="#toolnode">ToolNode</a></p>
+</div>
+
+<!-- ================================================================== -->
+
 <footer class="lesson-footer">
   <p>本术语表随课程持续更新 · AI Engineering 教学工作区 · 2026</p>
 </footer>
 
 </body>
 </html>
+
