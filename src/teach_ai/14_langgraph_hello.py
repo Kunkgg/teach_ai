@@ -58,7 +58,7 @@ llm_with_tools = llm.bind_tools(tools)
 #   提示：需要用 Annotated 和 add_messages 让消息列表自动追加而非覆盖
 #   格式：messages: Annotated[____, ____]
 class State(TypedDict):
-    messages: ____  # ← 填这里
+    messages: Annotated[list, add_messages]
 
 
 # ── 4. 定义 Node —— 和 Lesson 8 的「调用 LLM」一样 ──
@@ -82,7 +82,7 @@ graph_builder.add_edge(START, "chatbot")  # 入口 → chatbot
 # TODO(②): 添加条件边 —— chatbot 之后，根据是否有 tool_calls 决定去向
 #   提示：用 add_conditional_edges，第一个参数是源节点名，第二个参数是路由函数
 #   tools_condition 会在有 tool_calls 时返回 "tools"，否则返回 END
-____  # ← 填这里
+graph_builder.add_conditional_edges("chatbot", tools_condition)
 
 graph_builder.add_edge("tools", "chatbot")  # 工具执行完 → 回到 chatbot
 
@@ -99,7 +99,7 @@ print()
 # TODO(③): 调用 graph，传入正确格式的输入
 #   提示：graph.invoke() 接收一个字典，key 是 state 的字段名
 #   messages 字段需要是一个消息列表
-result = ____  # ← 填这里
+result = graph.invoke({"messages": [HumanMessage(content=question)]})
 
 # 打印对话过程
 for msg in result["messages"]:

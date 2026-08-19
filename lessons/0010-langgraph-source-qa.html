@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0010 — 源码三问：Annotated、sys.intern 与 path_map</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/quiz.css">
+  <link rel="stylesheet" href="../assets/task.css">
+  <link rel="stylesheet" href="../assets/reveal.css">
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Lesson 0010</span>
+  <h1>源码三问：Annotated、sys.intern 与 path_map</h1>
+  <p class="lesson-subtitle">你在 Lesson 0009 读源码时提出的三个问题 — 答疑课</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 15–20 分钟</span>
+    <span><span class="tag tag-langchain">答疑 + 动手</span></span>
+    <span>📅 Week 3</span>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<h2>先说一句：你能提出这三个问题，本身就是信号</h2>
+
+<p>这三个问题不是"学不会"的问题，是<strong>读进源码了</strong>才会有的问题。面试里"调包侠"和"工程师"的分界线就在这里：前者只会 <code>graph_builder.add_node(...)</code>，后者知道框架每一行背后是标准 Python。本课逐个回答，最后的结论只有一个：<strong>LangGraph 没有魔法，全是标准 Python 机制。</strong></p>
+
+<!-- ================================================================== -->
+<h2>Q1: Annotated[list, add_messages] — add_messages 到底是什么？</h2>
+
+<p><strong>你的理解偏差在哪：</strong>「列表的每一项是 add_messages 类型」——不对。在 <code>Annotated[list, add_messages]</code> 里，<strong>真正的类型只有第一个参数 <code>list</code></strong>。<code>add_messages</code> 不是类型，是<strong>挂在类型上的元数据（metadata）</strong>——对类型检查器（mypy / pyright）完全不可见，但对运行时的框架代码可读。</p>
+
+<p><code>Annotated</code> 的语法（<a href="https://peps.python.org/pep-0593/" target="_blank">PEP 593</a>）：</p>
+
+<pre><code>Annotated[真正的类型, 元数据1, 元数据2, ...]
+#       ↑ 类型检查器只看这个      ↑ 运行时框架从这里读取</code></pre>
+
+<p>所以这行声明的含义是：「<code>messages</code> 是一个 <code>list</code>；附注：更新它时请用 <code>add_messages</code> 这个函数合并」。这个"合并函数"就是文档说的 <strong>reducer</strong>——签名 <code>(旧值, 新值) → 合并值</code>。看真实源码（<code>langgraph/graph/message.py:61</code>）：</p>
+
+<pre><code>def add_messages(left: Messages, right: Messages) -> Messages:
+    """Merges two lists of messages, updating existing messages by ID."""
+    # left = 旧值（已有的消息列表）
+    # right = 新值（node 返回的部分更新）
+    # 返回一个新列表：默认追加；如果新消息的 ID 和已有消息相同，则替换</code></pre>
+
+<p>注意最后半句：<strong>按 ID 合并</strong>——同 ID 替换、不同 ID 追加。这不是简单的 <code>list + list</code>，它同时支持了「对话历史追加」和「同一条消息被重写」（LangGraph 回放、分支场景需要）。</p>
+
+<h3>框架是怎么"读"到这个元数据的？</h3>
+
+<p>你自己 30 秒就能复现。这是每个用 Annotated 的框架共同的机制：</p>
+
+<pre><code>from typing import Annotated, get_type_hints, get_args
+from typing_extensions import TypedDict
+from langgraph.graph import add_messages
+
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+
+get_type_hints(State)['messages']                    # &lt;class 'list'&gt; ← 被"剥"成裸类型！
+hint = get_type_hints(State, include_extras=True)['messages']  # Annotated[list, add_messages]
+real_type, metadata = get_args(hint)
+print(real_type)   # &lt;class 'list'&gt;   ← 真正的类型
+print(metadata)    # &lt;function add_messages&gt; ← reducer</code></pre>
+
+<p>⚠️ 两个坑：<code>get_type_hints()</code> <strong>默认会剥掉 Annotated</strong>，必须传 <code>include_extras=True</code>；拆包要用 <code>get_args()</code>。LangGraph 在 <code>compile()</code> 时就是这么扫一遍 State 的类型注解，把带 reducer 的字段建成"可合并 channel"，不带的用默认行为（<strong>覆盖，LastValue</strong>）——这就是 Lesson 9 说的「忘了 add_messages → 对话历史丢失」的根源。</p>
+
+<h3>这个 idiom 值得记住：一次学习，处处复用</h3>
+
+<p><code>Annotated</code> 是 Python 类型系统的通用扩展点，主流框架全在用同一招：</p>
+
+<pre><code>FastAPI : Annotated[str, Query(max_length=50)]   # 参数校验
+Pydantic: Annotated[int, Field(gt=0)]             # 字段校验
+LangGraph: Annotated[list, add_messages]          # reducer 合并策略</code></pre>
+
+<p>面试被问「LangGraph 的 State 是怎么实现的」时的满分回答：<em>TypedDict + PEP 593 Annotated 元数据；框架在编译时用 <code>get_type_hints(include_extras=True)</code> 读出每个字段的 reducer，运行时按 reducer 合并各 node 的部分更新。</em></p>
+
+<!-- ================================================================== -->
+<h2>Q2: START / END 为什么用 sys.intern？</h2>
+
+<p>源码（<code>langgraph/constants.py:28-30</code>）：</p>
+
+<pre><code>END   = sys.intern("__end__")
+START = sys.intern("__start__")</code></pre>
+
+<p><code>sys.intern(s)</code> 的作用：CPython 内部维护一张全局<strong>驻留表（interned string table）</strong>，调用后返回<strong>该内容唯一的那一个字符串对象</strong>。于是所有相等且已 intern 的字符串，<code>a is b</code> 为 True——不只是相等，是同一个对象。</p>
+
+<p>为什么框架爱给哨兵常量（sentinel）用 intern：</p>
+
+<ol>
+  <li><strong>比较走指针短路</strong>：CPython 的字符串 <code>==</code> 先检查对象身份（<code>is</code>）再逐字符比对。图执行循环里节点名和 <code>START</code>/<code>END</code> 的比较每一步都在发生，两边都 intern 过就能 O(1) 指针命中。</li>
+  <li><strong>内存只有一份</strong>：无论多少模块 import，全局就一个 <code>"__start__"</code> 对象。</li>
+</ol>
+
+<p>我实测过（2026-08-19，这台机器）：对 8 字符短串做 200 万次比较，intern 与否都是 ~0.027s——<strong>差异是噪声级</strong>。所以诚实的结论是：这是<strong>热路径 micro-optimization + 语义声明</strong>（"这是程序符号，不是一段文本"），不是什么大杀器。但机制本身值得懂。</p>
+
+<h3>两个冷知识（都可以自己验证）</h3>
+
+<pre><code>import sys
+from langgraph.graph import START
+
+'__start__' is START                 # True！标识符风格的字面量，编译期自动 intern
+''.join(['__', 'start__']) is START  # False：运行时拼出的等值字符串是"新"对象
+sys.intern('__' + 'start__') is START  # True（不过 '__'+'start__' 常量折叠了…真正逃逸要用 join）</code></pre>
+
+<p>⚠️ <strong>反模式警告</strong>：interned 字符串永不释放（Python 3.12 起是 immortal 对象）。所以<strong>永远不要对用户输入、无上限的动态字符串调用 <code>sys.intern()</code></strong>——那等于内存泄漏。它只该用于程序里固定的一小撮常量。</p>
+
+<!-- ================================================================== -->
+<h2>Q3: "tools" 这个名字是固定的吗？多个 tool node 怎么办？</h2>
+
+<p>先看 <code>tools_condition</code> 的全部逻辑（<code>langgraph/prebuilt/tool_node.py:1659-1664</code>），它比你想象的简单：</p>
+
+<pre><code>def tools_condition(state) -> Literal["tools", "__end__"]:
+    ...
+    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+        return "tools"
+    return "__end__"</code></pre>
+
+<p>就这。<strong>它只是个返回字符串的普通函数，根本不知道图里有哪些节点。</strong>「返回值 → 真实节点」的映射发生在 <code>add_conditional_edges</code> 的 <strong>path_map</strong> 参数里：</p>
+
+<pre><code># 默认（不传 path_map）：返回值直接被当成节点名
+graph.add_conditional_edges("chatbot", tools_condition)
+# → 所以约定俗成你的 tool node 必须叫 "tools"，否则报错：
+# ValueError: At 'chatbot' node, 'tools_condition' branch found unknown target 'tools'
+
+# 传 path_map：把"逻辑返回值"重映射到任意真实节点名
+graph.add_conditional_edges(
+    "chatbot", tools_condition,
+    {"tools": "my_tools", "__end__": END},
+)</code></pre>
+
+<p>两种情况对应的答案：</p>
+
+<ul>
+  <li><strong>tool node 改名 / 多个 tool node 并存</strong>：传 <code>path_map</code> 重映射；如果要<strong>动态选择</strong>去 tools1 还是 tools2，直接自己写 router 函数返回真实节点名（<code>add_conditional_edges</code> 本来就接受任意函数，<code>tools_condition</code> 只是官方预置的一个最常用特例）：</li>
+</ul>
+
+<pre><code>def route_by_tool(state) -> Literal["tools_search", "tools_calc", "__end__"]:
+    last = state["messages"][-1]
+    if not getattr(last, "tool_calls", None):
+        return END
+    names = {tc["name"] for tc in last.tool_calls}
+    if names & {"search_docs", "search_scans"}:
+        return "tools_search"
+    return "tools_calc"
+
+graph.add_conditional_edges("chatbot", route_by_tool)</code></pre>
+
+<p>为什么默认偏偏是 <code>"tools"</code>？没有魔法，就是 <code>create_react_agent</code> 内部给 tool node 取的名字，教程沿用了这个约定。<strong>"tools" 是约定，不是机制。</strong></p>
+
+<!-- ================================================================== -->
+<h2>Task ①：亲手触发一次 "unknown target"</h2>
+
+<div class="task-box">
+<p>改造 <code>src/teach_ai/14_langgraph_hello.py</code>（在副本上改，或改完记得改回来）。三步，每步都有即时反馈：</p>
+
+<ol>
+  <li>把 <code>add_node("tools", tool_node)</code> 改成 <code>add_node("my_tools", tool_node)</code>，运行 → <strong>观察报错</strong>：<code>ValueError: ... found unknown target 'tools'</code>。现在你确切知道这条错误的含义了。</li>
+  <li>给 <code>add_conditional_edges</code> 加上 <code>path_map</code>：<code>{"tools": "my_tools", "__end__": END}</code>（别忘了 import <code>END</code>）→ 运行，恢复正常。</li>
+  <li>打印 <code>graph.get_graph().draw_mermaid()</code>，确认图里的节点名已经是 <code>my_tools</code>。</li>
+</ol>
+
+<p>✅ 完成标准：能不看本课，向别人解释 path_map 的 key 和 value 分别是什么。</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识检验</h2>
+
+<div class="quiz" data-quiz-id="l10q1">
+  <p class="quiz-question">Q1: 在 <code>Annotated[list, add_messages]</code> 中，<code>add_messages</code> 的角色是什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">列表元素的类型，声明每条消息都必须是这个类的实例</button>
+    <button class="quiz-option" data-correct="true">挂在类型上的元数据，框架运行时读取的 reducer 函数</button>
+    <button class="quiz-option">一个装饰器，编译时自动给 State 生成消息校验逻辑</button>
+    <button class="quiz-option">一个类型别名，把 list 限制为只能存放 AIMessage 的子类</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l10q2">
+  <p class="quiz-question">Q2: LangGraph 给 <code>START</code>/<code>END</code> 用 <code>sys.intern</code> 的直接作用是？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">把字符串注册成全局常量，其他模块不导入也能直接访问</button>
+    <button class="quiz-option">把字符串变成只读对象，防止业务代码意外修改图的结构</button>
+    <button class="quiz-option" data-correct="true">同内容字符串归一成同一对象，比较可走指针身份短路</button>
+    <button class="quiz-option">让字符串跨进程自动同步，为分布式执行提前做优化</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l10q3">
+  <p class="quiz-question">Q3: tool node 改名为 <code>"my_tools"</code> 后，最省事的修复方式是？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">放弃 tools_condition，把整个图改回手写 while 循环执行工具</button>
+    <button class="quiz-option" data-correct="true">给 add_conditional_edges 传 path_map 重映射到 my_tools</button>
+    <button class="quiz-option">把 State 的 messages 字段改名，让路由函数重新识别该节点</button>
+    <button class="quiz-option">在 ToolNode 构造函数里传 name 参数，路由会自动感知新名字</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<!-- ================================================================== -->
+<h2>卡住了？点开看 Task 的关键改动</h2>
+
+<details class="reveal">
+  <summary>path_map 的完整写法</summary>
+  <div class="reveal-body">
+<pre><code>from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode, tools_condition
+
+tool_node = ToolNode(tools)
+
+graph_builder = StateGraph(State)
+graph_builder.add_node("chatbot", chatbot)
+graph_builder.add_node("my_tools", tool_node)          # ① 改名
+graph_builder.add_edge(START, "chatbot")
+graph_builder.add_conditional_edges(
+    "chatbot",
+    tools_condition,
+    {"tools": "my_tools", "__end__": END},             # ② key=路由函数返回值, value=真实节点名
+)
+graph = graph_builder.compile()</code></pre>
+    <p><strong>记住方向</strong>：<code>path_map</code> 的 key 是<strong>路由函数的返回值</strong>（逻辑目的地），value 是<strong>图里真实的节点名</strong>。方向写反了会在 compile/invoke 时报 unknown target。</p>
+  </div>
+</details>
+
+<!-- ================================================================== -->
+<h2>本课一句话总结</h2>
+
+<blockquote>
+<p><code>Annotated</code> 是类型系统的元数据扩展点（框架用 <code>get_type_hints</code> 读）；<code>sys.intern</code> 是 CPython 的字符串驻留（符号常量的 micro-optimization）；<code>tools_condition</code> 是个返回字符串的普通函数（节点映射靠 <code>path_map</code>）。<strong>框架没有魔法——遇到不懂的，去读源码，它就是 Python。</strong></p>
+</blockquote>
+
+<!-- ================================================================== -->
+<h2>推荐阅读</h2>
+
+<p>📖 <strong>Primary Source</strong>: <a href="https://docs.python.org/3/library/typing.html#typing.Annotated" target="_blank">Python Docs — typing.Annotated</a></p>
+<p>官方对 Annotated 的定义与示例。读完后可看 <a href="https://peps.python.org/pep-0593/" target="_blank">PEP 593</a> 的动机部分（为什么类型系统需要元数据扩展点）。<code>sys.intern</code> 见 <a href="https://docs.python.org/3/library/sys.html#sys.intern" target="_blank">Python Docs — sys.intern</a>；LangGraph 侧的 reducer 官方说明见 <a href="https://langchain-ai.github.io/langgraph/concepts/low_level/" target="_blank">LangGraph — Low Level Concepts</a>。</p>
+
+<!-- ================================================================== -->
+<h2>下一步预告</h2>
+
+<p><strong>记忆（Memory）</strong>——目前的 Agent 每次调用都是"失忆"的。下一课加入 <code>MemorySaver</code> + <code>thread_id</code>，让 Agent 记住多轮对话，变成一个有状态的可信看板助手。到时候你会发现：checkpoint 保存的正是今天讲的那个被 reducer 管理的 State。</p>
+
+<p>💬 还有别的源码疑问？直接贴出来问我——读源码的习惯值得一直保持。</p>
+
+<!-- ================================================================== -->
+
+<nav class="lesson-nav">
+  <a href="0009-langgraph-hello.html">← Lesson 0009: Hello, LangGraph</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · Mission: 从 Python 全栈到 AI 工程师 · 2026</p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+<script src="../assets/copy-code.js" defer></script>
+</body>
+</html>

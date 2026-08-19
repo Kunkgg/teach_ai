@@ -475,9 +475,30 @@
   <span class="glossary-term">tools_condition</span>
   <div class="glossary-def">
     <p>LangGraph 预置的条件路由函数。检查 State 中最后一条 <code>AIMessage</code> 是否包含 <code>tool_calls</code>：有则返回 <code>"tools"</code>（路由到工具节点），无则返回 <code>END</code>（结束图）。替代了 Lesson 8 的 <code>if not ai_msg.tool_calls: break</code>。</p>
+    <p><strong>它只是个返回字符串的普通函数，不知道图里有哪些节点。</strong>「返回值 → 真实节点名」的映射靠 <code>add_conditional_edges</code> 的 <code>path_map</code>：默认不传时返回值直接当节点名（所以 tool node 约定俗成必须叫 <code>"tools"</code>）；节点改名或多个 tool node 并存时传 <code>{"tools": "my_tools", "__end__": END}</code> 重映射，或自己写 router 函数返回真实节点名。</p>
     <p><code>from langgraph.prebuilt import tools_condition</code></p>
   </div>
-  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#edge">Conditional Edge</a>, <a href="#toolnode">ToolNode</a></p>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 深入: <a href="../lessons/0010-langgraph-source-qa.html">Lesson 0010</a> · 相关: <a href="#edge">Conditional Edge</a>, <a href="#toolnode">ToolNode</a></p>
+</div>
+
+<div class="glossary-entry" id="annotated">
+  <span class="glossary-term">Annotated</span>
+  <span class="glossary-term-zh">类型注解元数据</span>
+  <div class="glossary-def">
+    <p>Python 类型系统的通用扩展点（PEP 593）。<code>Annotated[T, meta]</code>：第一个参数 <code>T</code> 是<strong>真正的类型</strong>（类型检查器只看它），后续参数是<strong>元数据</strong>——类型检查器忽略，框架在运行时用 <code>get_type_hints(cls, include_extras=True)</code> + <code>get_args()</code> 读取。⚠️ 默认的 <code>get_type_hints()</code> 会把 Annotated 剥成裸类型。</p>
+    <p>同一 idiom 处处在用：FastAPI <code>Annotated[str, Query()]</code>（参数校验）、Pydantic <code>Annotated[int, Field(gt=0)]</code>（字段校验）、LangGraph <code>Annotated[list, add_messages]</code>（reducer 合并策略）。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0010-langgraph-source-qa.html">Lesson 0010</a> · 相关: <a href="#reducer">Reducer</a>, <a href="#add-messages">add_messages</a></p>
+</div>
+
+<div class="glossary-entry" id="sys-intern">
+  <span class="glossary-term">sys.intern</span>
+  <span class="glossary-term-zh">字符串驻留</span>
+  <div class="glossary-def">
+    <p>CPython 的字符串驻留机制：返回该内容在全局驻留表中的<strong>唯一对象</strong>，使相等字符串满足 <code>a is b</code>。作用：① 字符串 <code>==</code> 可走指针身份短路（CPython 先查 <code>is</code> 再逐字符比对）；② 内存只有一份。LangGraph 用它定义哨兵常量：<code>START = sys.intern("__start__")</code>、<code>END = sys.intern("__end__")</code>——热路径 micro-optimization + "这是符号不是文本"的语义声明（短字符串实测差异为噪声级）。</p>
+    <p>⚠️ interned 字符串永不释放（3.12+ immortal），<strong>永远不要 intern 用户输入或无上限的动态字符串</strong>。冷知识：标识符风格的字面量（如 <code>"__start__"</code>）编译期会被自动 intern。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0010-langgraph-source-qa.html">Lesson 0010</a> · 相关: <a href="#stategraph">StateGraph</a></p>
 </div>
 
 <!-- ================================================================== -->

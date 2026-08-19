@@ -35,4 +35,4 @@ Week 2 收官（Lesson 0008 Tool Calling）后，用户已理解 Tool Calling �
 - 最终：用 LangGraph 构建可信评估 Agent（Week 3 收官项目）
 
 ## Status
-Created — 等待用户验证
+Verified — 2026-08-19 用户完成 Lesson 0009（`14_langgraph_hello.py`），并主动读源码提出三个深入问题（见 [0012](0012-langgraph-source-qa.md)）。Caveat 中的 path_map 疑问正是用户的问题之一。
