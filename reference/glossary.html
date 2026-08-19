@@ -398,7 +398,7 @@
     <p>LangChain 生态中用于构建<strong>有状态 AI Agent</strong>的框架。核心思想：用<strong>状态图（StateGraph）</strong>替代手写 <code>while</code> 循环来管理 Tool Calling 的迭代过程。提供状态持久化（Checkpointing）、可视化调试、条件路由、人工中断（Human-in-the-loop）等生产级特性。</p>
     <p><code>from langgraph.graph import StateGraph, START, END</code></p>
   </div>
-  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#stategraph">StateGraph</a>, <a href="#tool-calling">Tool Calling</a>, <a href="#agent">Agent</a></p>
+  <p class="glossary-related">首见: <a href="../lessons/0009-langgraph-hello.html">Lesson 0009</a> · 相关: <a href="#stategraph">StateGraph</a>, <a href="#tool-calling">Tool Calling</a>, <a href="#checkpoint">Checkpoint</a>, <a href="#agent">Agent</a></p>
 </div>
 
 <div class="glossary-entry" id="stategraph">
@@ -499,6 +499,37 @@
     <p>⚠️ interned 字符串永不释放（3.12+ immortal），<strong>永远不要 intern 用户输入或无上限的动态字符串</strong>。冷知识：标识符风格的字面量（如 <code>"__start__"</code>）编译期会被自动 intern。</p>
   </div>
   <p class="glossary-related">首见: <a href="../lessons/0010-langgraph-source-qa.html">Lesson 0010</a> · 相关: <a href="#stategraph">StateGraph</a></p>
+</div>
+
+<div class="glossary-entry" id="checkpoint">
+  <span class="glossary-term">Checkpoint / Checkpointer</span>
+  <span class="glossary-term-zh">检查点 / 检查点存储器</span>
+  <div class="glossary-def">
+    <p><strong>Checkpointer</strong> 是给图挂上的状态存档器：<code>graph_builder.compile(checkpointer=InMemorySaver())</code>。挂上后，LangGraph 在<strong>每个超步（superstep，一轮 node 执行）结束后</strong>把整个 State 序列化成一份 <strong>checkpoint</strong>。下次同会话 <code>invoke()</code> 先取回存档、由 reducer 合并新消息再继续——多轮记忆的全部原理。checkpoint 存的正是被 reducer 管理的 State：reducer 决定「怎么合并」，checkpointer 决定「怎么保存」。</p>
+    <p><code>InMemorySaver</code> 是 1.x 正式名（<code>MemorySaver</code> 仅为兼容别名，源码 <code>MemorySaver = InMemorySaver</code>）。内存版仅供调试；生产换 <code>SqliteSaver</code> / <code>PostgresSaver</code>（独立包 <code>langgraph-checkpoint-sqlite</code> / <code>-postgres</code>）。checkpointer 在 compile 时<strong>注入</strong>，graph 不关心存储位置——换存储后图定义代码零改动。</p>
+    <p><code>from langgraph.checkpoint.memory import InMemorySaver</code></p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0011-langgraph-memory.html">Lesson 0011</a> · 相关: <a href="#thread-id">thread_id</a>, <a href="#statesnapshot">StateSnapshot</a>, <a href="#state-langgraph">State</a>, <a href="#reducer">Reducer</a></p>
+</div>
+
+<div class="glossary-entry" id="thread-id">
+  <span class="glossary-term">thread_id</span>
+  <span class="glossary-term-zh">会话线程 ID</span>
+  <div class="glossary-def">
+    <p>checkpointer 内部按 thread_id 分格子存快照（<code>defaultdict(thread_id → checkpoints)</code>），是<strong>会话的钥匙</strong>：同 thread_id 取回历史，新 thread_id 空白开局——记忆按 thread_id 隔离，多用户/多会话天然不串线。≈ 后端经验里的「会话 ID」。</p>
+    <p>⚠️ Gotcha：必须嵌在 config 的 <code>"configurable"</code> 里，不能放顶层：<code>config = {"configurable": {"thread_id": "thread-1"}}</code>，然后 <code>graph.invoke(input, config)</code>。挂了 checkpointer 却不传会报 <code>ValueError: Checkpointer requires one or more of the following 'configurable' keys: thread_id, ...</code></p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0011-langgraph-memory.html">Lesson 0011</a> · 相关: <a href="#checkpoint">Checkpoint</a>, <a href="#statesnapshot">StateSnapshot</a></p>
+</div>
+
+<div class="glossary-entry" id="statesnapshot">
+  <span class="glossary-term">StateSnapshot / get_state()</span>
+  <span class="glossary-term-zh">状态快照</span>
+  <div class="glossary-def">
+    <p><code>graph.get_state(config)</code> 返回某个 thread 当前的 <code>StateSnapshot</code>——调试 Agent 的 print。三件套：<code>.values</code>（当前完整 State）、<code>.next</code>（下一个待执行节点的元组，<code>()</code> 空元组 = 图跑完在等下一轮输入）、<code>.config["configurable"]</code>（invoke 后自动追加 <code>checkpoint_id</code> 指向最新快照）。</p>
+    <p><code>graph.get_state_history(config)</code> 列出该 thread 的全部 checkpoint（每个超步一份）——time travel / 回放 / 分叉的原料。</p>
+  </div>
+  <p class="glossary-related">首见: <a href="../lessons/0011-langgraph-memory.html">Lesson 0011</a> · 相关: <a href="#checkpoint">Checkpoint</a>, <a href="#thread-id">thread_id</a>, <a href="#state-langgraph">State</a></p>
 </div>
 
 <!-- ================================================================== -->

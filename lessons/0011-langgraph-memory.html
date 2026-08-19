@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0011 — 给 Agent 装上记忆：Checkpointer 与 thread_id</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="../assets/quiz.css">
+  <link rel="stylesheet" href="../assets/task.css">
+  <link rel="stylesheet" href="../assets/reveal.css">
+</head>
+<body>
+
+<header class="lesson-header">
+  <span class="lesson-number">Lesson 0011</span>
+  <h1>给 Agent 装上记忆：Checkpointer 与 thread_id</h1>
+  <p class="lesson-subtitle">同一个 Agent，有人记得住上文，有人失忆 —— 差别就在这两样东西</p>
+  <div class="lesson-meta">
+    <span>⏱️ 约 25–35 分钟</span>
+    <span><span class="tag tag-langchain">LangGraph · Memory</span></span>
+    <span>📅 Week 3</span>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<h2>问题：你的 Agent 是金鱼</h2>
+
+<p>回去在 <code>14_langgraph_hello.py</code> 里连问两次试试：<code>graph.invoke()</code> 第一次问"auth-service 有多少违规"，第二次问"那它的可信分数呢"——第二次它会<strong>完全不知道"它"是谁</strong>。因为每次 <code>invoke()</code> 都从空白 State 开始，上一次的 <code>messages</code> 没有任何人替你留着。</p>
+
+<p>这不是玩具问题。可信看板的用户就是这么说话的：</p>
+
+<blockquote><p>"auth-service 有多少条违规？" → "那它的分数呢？" → "比 user-service 好还是差？"</p></blockquote>
+
+<p>第二句的"它"、第三句的"刚才"都依赖前文。Week 1 你在 <code>qa.py</code> 里其实解决过这个问题——<strong>自己维护一个全局 <code>messages</code> 列表</strong>，每轮 append 后整体传给 LLM。能用，但只能一个进程一个会话，重启全丢。今天看 LangGraph 怎么把这件事做成生产级能力：<strong>两个新名词，Checkpointer 和 thread_id，就这两样。</strong></p>
+
+<!-- ================================================================== -->
+<h2>概念 ①: Checkpointer —— 每一步都存一份 State 快照</h2>
+
+<p>给你的图挂上一个 <strong>checkpointer</strong>，LangGraph 就会在<strong>每个超步（superstep，即每个 node 执行一轮）结束后</strong>，把当时的整个 State 序列化存起来。下次同一个会话再 <code>invoke()</code>，它先把存好的 State 取出来，把你的新消息合并进去，再继续跑——这就是记忆的全部原理。</p>
+
+<pre><code>from langgraph.checkpoint.memory import InMemorySaver
+
+checkpointer = InMemorySaver()
+graph = graph_builder.compile(checkpointer=checkpointer)   # ← 就多这一个参数</code></pre>
+
+<p>呼应你上一课读源码的发现：<strong>checkpoint 存的正是那个被 <code>add_messages</code> reducer 管理的 State。</strong>分工很清楚——reducer 决定「新消息怎么合并进 State」，checkpointer 决定「合并后的 State 怎么保存」。所以如果你忘了写 <code>Annotated[list, add_messages]</code>，checkpointer 也救不了你：它忠实地每步存档，但每次存的都是被覆盖后的残缺历史。</p>
+
+<h3>名字考古（读源码习惯持续生效）</h3>
+
+<p>老教程里叫 <code>MemorySaver</code>——你现在装的是 langgraph 1.2.10，打开 <code>langgraph/checkpoint/memory/__init__.py</code> 看最后一行：</p>
+
+<pre><code># line 33: class InMemorySaver(...)      ← 1.x 的正式类名
+# line 41: "Only use `InMemorySaver` for debugging or testing purposes."
+# line 631: MemorySaver = InMemorySaver  # Kept for backwards compatibility</code></pre>
+
+<p><code>MemorySaver</code> 只是别名。docstring 那句警告也很诚实：内存版进程一退就没了，<strong>生产环境换 <code>SqliteSaver</code>（单机文件）或 <code>PostgresSaver</code>（生产标配）</strong>，都在独立的包里（<code>langgraph-checkpoint-sqlite</code> / <code>langgraph-checkpoint-postgres</code>，需要时 <code>uv add</code> 即可）。关键设计：checkpointer 是 <code>compile()</code> 时<strong>注入</strong>的——graph 本身不知道、也不关心 checkpoint 存在哪。所以从内存换到 Postgres，<strong>图的定义代码一行不改</strong>。这是面试常考的设计题答案。</p>
+
+<!-- ================================================================== -->
+<h2>概念 ②: thread_id —— 会话的钥匙</h2>
+
+<p>checkpointer 内部按 <code>thread_id</code> 分格子存快照（源码里就是一个 <code>defaultdict(thread_id → checkpoints)</code>）。所以你要告诉它：这次调用属于哪个会话。方式是给 <code>invoke()</code> 传第二个参数 config：</p>
+
+<pre><code>config = {"configurable": {"thread_id": "thread-1"}}
+graph.invoke({"messages": [HumanMessage(content="...")]}, config)</code></pre>
+
+<p>⚠️ <strong>Gotcha：thread_id 必须嵌在 <code>"configurable"</code> 里，不能放顶层。</strong>这个双层 dict 没人能猜出来，只能记住。为什么这么设计？<code>invoke()</code> 的第二个参数是通用的 <code>RunnableConfig</code>（LangChain 全家共用的运行配置，还能放 <code>callbacks</code>、<code>max_concurrency</code> 等），<code>"configurable"</code> 是它留给「运行时可变参数」的抽屉，thread_id 只是抽屉里的一件。挂了 checkpointer 却不传 thread_id 会直接报错——我实测的原文：</p>
+
+<pre><code>ValueError: Checkpointer requires one or more of the following
+'configurable' keys: thread_id, checkpoint_ns, checkpoint_id</code></pre>
+
+<p>于是多轮对话变成这样，注意第二轮只传了<strong>一条新消息</strong>：</p>
+
+<pre><code># 第 1 轮：auth-service 有多少违规？     → 消息数 4（问 + tool_call + 结果 + 回答）
+graph.invoke({"messages": [HumanMessage(content=q1)]}, config)
+
+# 第 2 轮：那它的可信分数呢？            → 消息数 8，历史在累积
+graph.invoke({"messages": [HumanMessage(content=q2)]}, config)   # ← 没传任何历史！</code></pre>
+
+<p>历史不在你的输入里——<strong>在 checkpoint 里</strong>。LangGraph 拿 thread_id 取回第 1 轮结束时的 State，用 reducer 把 q2 合并进去，LLM 看到的 messages 自动是完整 8 条。换一个 thread_id，同一个 graph 对象立刻"失忆"：<strong>记忆按 thread_id 隔离</strong>，多用户/多会话天然互不串线。这个模型对照你的后端经验很好理解：thread_id ≈ 会话 ID，checkpointer ≈ 会话存储，只是存的是 State 快照而不是 session blob。</p>
+
+<!-- ================================================================== -->
+<h2>概念 ③: get_state() —— 亲眼看见 checkpoint</h2>
+
+<p>记忆不能是个黑盒。任何时候都能查一个 thread 的现状：</p>
+
+<pre><code>snapshot = graph.get_state(config)
+
+snapshot.values          # 当前完整 State，.values["messages"] 就是那 8 条消息
+snapshot.next            # 下一个待执行的节点；() 空元组 = 图跑完了，在等下一轮输入
+snapshot.config["configurable"]
+                         # {'thread_id': 'thread-1', 'checkpoint_id': '1f19be4e-...'}
+                         #            ↑ invoke 之后被自动追加，指向最新快照
+
+list(graph.get_state_history(config))   # 每个超步一份快照（上面两轮共 10 份）
+                                         # —— time travel / 回放 / 分叉的原料，下下课细讲</code></pre>
+
+<p>记住三件套：<code>.values</code>（现在什么样）、<code>.next</code>（接下来谁执行）、<code>history</code>（一路怎么来的）。调试 Agent 时 <code>get_state</code> 就是你的 print——不用在 node 里到处插日志。</p>
+
+<!-- ================================================================== -->
+<h2>Task ①：三处填空，亲眼看 Agent 记住"它"</h2>
+
+<div class="task-box">
+<p>新建 <code>src/teach_ai/15_memory_saver.py</code>（我已放好，工具/LLM/State 和 14 完全一样，只有三处空白）。填空 ① <code>compile</code> 挂 checkpointer、② config 嵌套、③ 第二轮 invoke 只传新问题。</p>
+
+<pre><code>uv run python src/teach_ai/15_memory_saver.py</code></pre>
+
+<p>跑通后你会看到类似这样的输出（我已实测，DeepSeek 真实返回）：</p>
+
+<pre><code>🧑 [第 1 轮 / thread-1]: 组件 auth-service 有多少条编码规范违规？
+📊 checkpoint 里的消息数: 4  (下个待执行节点: 无，已空闲)
+📊 checkpoint 里的消息数: 8  (第 1 轮结束后是 4，涨了说明历史在累积)
+🤖 [第 2 轮回答]: 组件 **auth-service** 的可信分数为 **85.5** 分（满分 100）。
+
+🧑 [第 1 轮 / thread-2]: 我刚才问的是哪个组件？   ← 新线程，没听过上文
+🤖 [thread-2 回答]: 从当前对话来看，我没有之前的对话记录，无法得知您刚才询问的是哪个组件。</code></pre>
+
+<p>✅ 完成标准：第 2 轮回答里出现 85.5（说明"它"被正确解析为 auth-service），thread-2 说不知道（说明隔离生效）。</p>
+
+<p><strong>改造任务（不加不行的那种）</strong>：把 15 改成 <code>while True: input()</code> 的交互式 CLI，固定一个 thread_id——恭喜，这就是 Week 1 <code>qa.py</code> 的 LangGraph 版，你的可信看板助手雏形。对比一下：你删掉了多少行手动维护 <code>messages</code> 的代码？</p>
+</div>
+
+<!-- ================================================================== -->
+<h2>知识检验</h2>
+
+<div class="quiz" data-quiz-id="l11q1">
+  <p class="quiz-question">Q1: <code>compile(checkpointer=InMemorySaver())</code> 之后，<code>invoke</code> 时不传 config 会发生什么？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">正常运行，LangGraph 自动生成一个默认的 thread_id</button>
+    <button class="quiz-option" data-correct="true">抛出 ValueError，提示 configurable 里缺少 thread_id</button>
+    <button class="quiz-option">正常运行，但本轮对话的状态不会被保存到 checkpoint</button>
+    <button class="quiz-option">抛出 TypeError，因为 invoke 的第二个参数必须是 RunnableConfig 类型</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l11q2">
+  <p class="quiz-question">Q2: 第二轮只传一条新消息，Agent 却记得上文——完整的历史来自哪里？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">模型服务端保存了会话，服务端按上下文自动补全了历史</button>
+    <button class="quiz-option" data-correct="true">checkpointer 按 thread_id 取回上轮 State，reducer 合并新消息</button>
+    <button class="quiz-option">InMemorySaver 把历史缓存进了 LLM 的 context window 里</button>
+    <button class="quiz-option">HumanMessage 自带会话引用，序列化时附带了之前的全部消息</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<div class="quiz" data-quiz-id="l11q3">
+  <p class="quiz-question">Q3: 从原型转生产，把 InMemorySaver 换成 PostgresSaver，图的定义代码要改几行？</p>
+  <div class="quiz-options">
+    <button class="quiz-option">每个 node 都要改，因为读写 State 的路径全部换成了数据库</button>
+    <button class="quiz-option">零行。checkpointer 在 compile 时注入，graph 不关心存储位置</button>
+    <button class="quiz-option">只改 chatbot 节点，把消息列表的读写改为调 Postgres 的 API</button>
+    <button class="quiz-option">State 定义和全部 node 都要改，还要给每条消息加数据库主键</button>
+  </div>
+  <div class="quiz-feedback" hidden></div>
+</div>
+
+<!-- ================================================================== -->
+<h2>卡住了？点开看三处空白的答案</h2>
+
+<details class="reveal">
+  <summary>15_memory_saver.py 完整答案</summary>
+  <div class="reveal-body">
+<pre><code># ① compile 时注入 checkpointer
+graph = graph_builder.compile(checkpointer=checkpointer)
+
+# ② thread_id 必须嵌在 "configurable" 里 —— 双层 dict，记住它
+config = {"configurable": {"thread_id": "thread-1"}}
+
+# ③ 只传新问题这一条消息，历史由 checkpoint 自动带回
+result = graph.invoke({"messages": [HumanMessage(content=q2)]}, config)</code></pre>
+    <p>改造任务的骨架：<code>while True: q = input("🧑 "); if q == "exit": break; graph.invoke({"messages": [HumanMessage(content=q)]}, config)</code>——注意循环里从头到尾不需要任何 messages 变量。</p>
+  </div>
+</details>
+
+<!-- ================================================================== -->
+<h2>本课一句话总结</h2>
+
+<blockquote>
+<p><code>compile(checkpointer=...)</code> 让每个超步后的 State 自动存档；<code>{"configurable": {"thread_id": ...}}</code> 是会话的钥匙——同 key 取回历史，新 key 空白开局；<code>get_state()</code> 让记忆不再是黑盒。<strong>记忆不是模型的超能力，是工程上的存取问题——而你早就会做会话存储了。</strong></p>
+</blockquote>
+
+<!-- ================================================================== -->
+<h2>推荐阅读</h2>
+
+<p>📖 <strong>Primary Source</strong>: <a href="https://langchain-ai.github.io/langgraph/concepts/persistence/" target="_blank">LangGraph — Persistence &amp; Memory（官方概念文档）</a></p>
+<p>这页系统讲了 checkpoint、thread、time travel 的完整模型，是本课的一手出处。读完可再看 <a href="https://langchain-ai.github.io/langgraph/how-tos/persistence_memory/" target="_blank">How-to: Add persistence to a graph</a>（含 SqliteSaver 的安装用法）。进阶方向在 <a href="https://www.deeplearning.ai/short-courses/long-term-agentic-memory-with-langgraph/" target="_blank">DeepLearning.AI — Long-Term Agentic Memory with LangGraph</a>（跨会话的长期记忆，Week 4 若有余力再看）。</p>
+
+<!-- ================================================================== -->
+<h2>下一步预告</h2>
+
+<p><strong>Human-in-the-loop</strong>——checkpointer 不只是给记忆用的。下一课用 <code>interrupt</code> 让图在"AI 生成完版本发布评估报告"之后<strong>暂停等人工审核</strong>，批准了才继续执行后续节点。中断、恢复、人工改 State，全部建立在今天的 checkpoint 之上——这就是为什么这课必须先上。你的版本发布检查流程，本质上就是一个需要人拍板的图。</p>
+
+<p>💬 顺手的问题：如果你的看板要同时服务 10 个用户，thread_id 你会怎么生成？（想想 FastAPI 里你怎么发 session ID 的。）有疑问随时问我。</p>
+
+<!-- ================================================================== -->
+
+<nav class="lesson-nav">
+  <a href="0010-langgraph-source-qa.html">← Lesson 0010: 源码三问</a>
+  <span><a href="../reference/glossary.html#checkpoint">Glossary: Checkpoint · thread_id · StateSnapshot →</a></span>
+</nav>
+
+<footer class="lesson-footer">
+  <p>AI Engineering 教学工作区 · Mission: 从 Python 全栈到 AI 工程师 · 2026</p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+<script src="../assets/copy-code.js" defer></script>
+</body>
+</html>
